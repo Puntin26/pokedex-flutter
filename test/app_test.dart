@@ -5,8 +5,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:pokedex/app/app.dart';
+import 'package:pokedex/app/connection_status_provider.dart';
 import 'package:pokedex/app/pokemon_dependencies.dart';
 import 'package:pokedex/core/database/app_database.dart';
+import 'package:pokedex/core/connectivity/connection_monitor.dart';
 import 'package:pokedex/core/domain/sync_failure.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
@@ -103,6 +105,13 @@ void main() {
         appDatabaseProvider.overrideWithValue(database),
         pokemonRepositoryProvider.overrideWithValue(local),
         pokemonSyncProvider.overrideWithValue(sync),
+        connectionMonitorProvider.overrideWithValue(
+          ConnectionMonitor(
+            hasNetwork: () async => false,
+            networkChanges: const Stream.empty(),
+            isServiceAvailable: () async => false,
+          ),
+        ),
       ],
     );
     await tester.pumpWidget(
@@ -224,6 +233,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('Ruta de prueba'), findsOneWidget);
+      expect(find.text('Offline'), findsOneWidget);
       navigator.pop();
       await tester.pumpAndSettle();
       await tester.pumpWidget(

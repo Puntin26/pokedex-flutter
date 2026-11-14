@@ -2,7 +2,10 @@ import 'dart:async';
 
 import 'package:graphql/client.dart';
 
-const pokeApiEndpoint = 'https://graphql.pokeapi.co/v1beta2';
+const pokeApiEndpoint = String.fromEnvironment(
+  'POKEAPI_ENDPOINT',
+  defaultValue: 'https://graphql.pokeapi.co/v1beta2',
+);
 const catalogRequestTimeout = Duration(seconds: 30);
 
 GraphQLClient createPokeApiClient({

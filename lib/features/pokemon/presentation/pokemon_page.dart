@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'pokemon_catalog_controller.dart';
 import 'pokemon_catalog_state.dart';
+import 'pokemon_card.dart';
 
 class PokemonPage extends ConsumerWidget {
   const PokemonPage({super.key});
@@ -76,11 +77,7 @@ class PokemonPage extends ConsumerWidget {
           itemCount: catalog.pokemon.length,
           itemBuilder: (context, index) {
             final pokemon = catalog.pokemon[index];
-            return ListTile(
-              key: ValueKey(pokemon.id),
-              title: Text(pokemon.name),
-              subtitle: Text('#${pokemon.nationalNumber}'),
-            );
+            return PokemonCard(key: ValueKey(pokemon.id), pokemon: pokemon);
           },
         );
     }

@@ -1,6 +1,10 @@
 # Pokedex Flutter
 
-Base del avance con persistencia, GraphQL paginado y catalogo local reactivo.
+Proyecto de ICC-451-T Desarrollo de Aplicaciones Moviles, PUCMM. El objetivo es construir una Pokedex con Flutter, PokeAPI GraphQL y una base local observable, siguiendo Offline-First con preferencia por informacion actualizada.
+
+## Alcance del avance
+
+La app muestra tarjetas con nombre, numero nacional, imagen y tipos, observadas exclusivamente desde SQLite mediante Riverpod. Al abrirla sincroniza sin bloquear la pantalla. Conserva carga, datos, vacio, error y Reintentar. Un indicador global con texto e icono distingue Online, Offline y servicio no disponible mediante una comprobacion real de GraphQL. Las imagenes ausentes o fallidas muestran un respaldo. No contiene datos simulados en la aplicacion.
 
 ## Requisitos y ejecucion
 
@@ -32,6 +36,66 @@ flutter test
 flutter build apk --debug
 ```
 
+`flutter doctor -v` valida la cadena Android. Su aviso sobre Visual Studio incompleto corresponde al destino Windows de escritorio, que no forma parte de esta base movil. iOS requiere verificacion posterior en macOS.
+
+## Dependencias y decisiones iniciales
+
+| Dependencia | Responsabilidad y justificacion |
+|---|---|
+| Flutter / Dart | Plataforma y lenguaje exigidos; widgets Material para la base movil. |
+| `material_ui` | Biblioteca Material oficial utilizada por la plantilla de Flutter 3.50; evita usar el import Material obsoleto del SDK. |
+| `flutter_riverpod` | Inyeccion de base, repositorio y coordinador compartidos; streams locales y estados del catalogo. Se elige frente a BLoC para reducir clases iniciales. |
+| `drift` | Consultas SQLite reactivas, transacciones y restricciones para persistencia estructurada. Se elige frente a guardar JSON o depender de una cache remota, que no satisfacen la fuente local observable. |
+| `drift_flutter` | Abre `pokedex.sqlite` en el directorio de documentos de la aplicacion y ejecuta SQLite en segundo plano, sin integracion nativa propia. |
+| `graphql` | Transporte GraphQL de la capa de datos, con consultas `noCache`; los widgets no consumen respuestas remotas. Se elige frente a `graphql_flutter` para separar transporte y presentacion. |
+| `connectivity_plus` | Eventos y consulta de disponibilidad de red, complementados con una comprobacion pequena de GraphQL. Tener Wi-Fi no garantiza acceso al servicio. |
+| `drift_dev` / `build_runner` | Generan las tablas y consultas tipadas de Drift. `app_database.g.dart` se versiona y no debe editarse manualmente. Se omite la API Manager generada porque usamos consultas explicitas. |
+| `flutter_test` / `flutter_lints` | Pruebas de datos, sincronizacion y pantalla; reglas de analisis estatico. |
+
+`pubspec.yaml` declara las dependencias directas y `pubspec.lock` fija las versiones resueltas para reproducir la instalacion. No se agregan generadores de Riverpod, librerias de navegacion ni paquetes visuales adicionales.
+
+## Estructura y responsabilidades
+
+```text
+lib/
+  main.dart                         # Arranque y ProviderScope
+  app/
+    app.dart                        # MaterialApp y catalogo
+    pokemon_dependencies.dart       # Instancias compartidas y liberacion de recursos
+    connection_status_provider.dart # Monitor compartido, eventos y ciclo de vida
+  core/
+    database/                       # Tablas, apertura, migraciones y codigo generado
+    domain/                         # Metadata y fallos de sincronizacion, Dart puro
+    network/                        # Cliente GraphQL, timeout y comprobacion de salud
+    connectivity/                   # Disponibilidad de red/servicio e indicador global
+  features/
+    pokemon/
+      presentation/                 # Providers, estado y pantalla del catalogo local
+      domain/                       # Pokemon, tipos, contratos de repositorio y sync
+      data/                         # Repositorio local, fuente GraphQL, DTO y coordinador
+    favorites/
+      presentation/
+      domain/                       # Favorito y contrato del repositorio
+      data/                         # Alta, baja y observacion local de favoritos
+test/
+  app_test.dart                     # Estados, reintento, SQLite -> UI y arranque no bloqueante
+  local_persistence_test.dart       # SQLite real en memoria y archivo temporal
+  pokemon_page_dto_test.dart        # Mapeo y rechazo de respuestas invalidas
+  remote_pokemon_source_test.dart   # Transporte HTTP local, timeout y errores
+  pokemon_sync_test.dart            # Paginacion, reanudacion y transacciones reales
+  pokemon_card_test.dart            # Tarjetas, imagen local HTTP y respaldo
+  connection_status_test.dart       # Indicador, eventos, ciclo de vida y descarte
+  pokeapi_service_probe_test.dart   # Salud de GraphQL sin cache y timeout
+tool/
+  pokeapi_smoke_test.dart           # Comprobacion manual acotada con Internet
+android/                            # Proyecto anfitrion Android
+ios/                                # Proyecto anfitrion iOS
+Documentacion/                      # ADR y diagramas de la arquitectura
+```
+
+Los archivos `.gitkeep` conservan las carpetas reservadas en Git; no son implementaciones. Las capas restantes se completaran segun la lista de tareas.
+
+Direccion de dependencias: `data` implementa contratos de `domain` y utiliza infraestructura de `core`. Las entidades y contratos son Dart puro, sin Flutter, Drift ni GraphQL. `app/pokemon_dependencies.dart` conecta las implementaciones; la presentacion utiliza contratos y entidades sin consultar SQLite ni GraphQL directamente.
 
 ## Persistencia local implementada
 
@@ -56,7 +120,6 @@ La metadata se consulta con `readSyncMetadata()` o `watchSyncMetadata()` por rec
 Las fechas se almacenan como timestamps SQLite con precision de segundos y se entregan al dominio en UTC. `image_url` guarda una referencia, no descarga ni garantiza disponibilidad offline de imagenes.
 
 Migraciones: una instalacion nueva crea todas las tablas. No existe un esquema previo que migrar. Se conserva el esquema inicial en `drift_schemas/drift_schema_v1.json`, exportado con `dart run drift_dev schema dump lib/core/database/app_database.dart drift_schemas/`. Los cambios futuros deben incrementar `schemaVersion`, agregar una migracion explicita y probar conservacion de datos; una transicion sin implementar falla en vez de borrar la base. Favoritos deben conservarse tambien durante las migraciones. `build.yaml` identifica la base para las herramientas de migracion.
-
 
 ## Flujo GraphQL a SQLite implementado
 
@@ -109,9 +172,45 @@ En `presentation/pokemon_catalog_controller.dart`, `localCatalogProvider` observ
 
 Las pruebas de pantalla usan SQLite real en memoria, el coordinador existente y respuestas controladas, sin Internet. Cubren arranque inmediato, carga, vacio, datos previos, fallo remoto con y sin datos, reintento, reanudacion, reinicio por cambio remoto, emisiones de datos y metadata, fallos locales y descarte durante una descarga. Una prueba mantiene pendiente la segunda pagina y comprueba datos de la primera en pantalla, desplazamiento, navegacion y reconstruccion sin descargas duplicadas. La ruta adicional existe solo en la prueba. La demostracion de reinicio offline debe comprobarse en Android.
 
+## Catalogo visual y conectividad
 
-Tarjetas con imagen e indicador global pendientes de integracion.
+`PokemonCard` recibe una entidad del catalogo local y muestra nombre, numero nacional y todos sus tipos (uno o dos). La imagen usa la URL guardada, ocupa un espacio de 88 x 88 y se decodifica con ancho de 176 pixeles. Mientras carga muestra un icono; si falta la URL o falla la descarga, muestra `Sin imagen` sin ocultar los datos ni interrumpir la lista. Los tipos usan `Wrap` y el nombre puede ocupar varias lineas.
 
-## Autoria
+Se usa `Image.network` y la cache acotada en memoria de Flutter, sin agregar dependencias. **No hay cache de imagenes en disco**: al reiniciar sin Internet no se garantiza conservarlas; las no disponibles usan el respaldo. Esto no afecta la persistencia SQLite del catalogo. El almacenamiento duradero de imagenes queda para el proyecto final.
+
+`connectionMonitorProvider` combina `connectivity_plus` con `PokeApiServiceProbe`. Este ultimo ejecuta `query ServiceHealth { __typename }` por el mismo endpoint de PokeAPI, con `noCache` y un cliente con timeout de **5 segundos**. Una respuesta valida sin errores confirma Online; sin red indica Offline; con red y fallo de GraphQL indica `Servicio no disponible`. Al iniciar se muestra `Comprobando conexion...`; un error al detectar la red tampoco se presenta como Online.
+
+`ConnectionStatusController` comprueba al iniciar, al cambiar la red, al volver a la app y cada **30 segundos**. Una respuesta anterior no puede sobrescribir un cambio de red mas reciente. El alcance compartido cancela la suscripcion, el temporizador y el observador de ciclo de vida, y libera el cliente al descartarse. El indicador vive en el `builder` de `MaterialApp`, fuera del Navigator; mantiene su posicion al cambiar de ruta y combina texto, icono y etiqueta Semantics.
+
+La disponibilidad no implica que el catalogo ya este actualizado: el estado de sincronizacion sigue en su controlador y metadata locales. Las comprobaciones del indicador no descargan ni actualizan el catalogo; la sincronizacion automatica al reconectar, el backoff y el indicador completo de sincronizacion del proyecto final siguen pendientes.
+
+### Simular GraphQL inaccesible con red activa
+
+Con datos sincronizados y la red encendida, compilar e instalar una version de prueba:
+
+```powershell
+flutter build apk --debug --dart-define=POKEAPI_ENDPOINT=https://127.0.0.1:1
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+Forzar el cierre y abrir desde el icono. Debe mostrar `Servicio no disponible` y conservar el catalogo local. El parametro afecta tanto la consulta del catalogo como la comprobacion de salud; solo cambia esa compilacion. Para recuperar el servicio normal, recompilar sin `--dart-define`, reinstalar con `-r` y reabrir. No desinstalar ni borrar datos. Este mecanismo no implementa backoff ni sincronizacion automatica al reconectar.
+
+## Limites conocidos
+
+Las exclusiones de Git evitan versionar compilaciones, caches, configuracion local del SDK, archivos del IDE y credenciales. Se versiona `pubspec.lock` para reproducir las dependencias.
+
+Se verificaron primera carga con y sin conexion, reinicio offline del catalogo, reintento y servicio inaccesible con red activa en Android. Las 69 pruebas cubren ademas concurrencia, reanudacion, navegacion con descarga pendiente y tres sincronizaciones sin duplicados ni perdida de favoritos. Formato, analisis y APK debug correctos. La base original se respaldo y restauro; sus conteos son 1351 Pokemon, 18 tipos y 2116 relaciones, con integridad SQLite correcta. Las imagenes siguen sin persistencia en disco y la actualizacion al reconectar requiere reintento manual.
+
+## Fuentes y autoria
+
+- Enunciados del avance y del proyecto final de la asignatura ICC-451-T, PUCMM.
+- [Instalacion oficial de Flutter](https://docs.flutter.dev/install/manual).
+- [Biblioteca Material oficial](https://pub.dev/packages/material_ui).
+- [Configuracion de Drift](https://drift.simonbinder.eu/setup/).
+- [Riverpod](https://riverpod.dev/).
+- [Cliente GraphQL para Dart](https://pub.dev/packages/graphql).
+- [Endpoint, esquema y limites oficiales de PokeAPI GraphQL](https://pokeapi.co/docs/graphql).
+- [Alcance y limites de connectivity_plus](https://pub.dev/packages/connectivity_plus).
+- [Carga y manejo de imagenes de Flutter](https://api.flutter.dev/flutter/widgets/Image/Image.network.html).
 
 La aplicacion utiliza la plantilla oficial de Flutter y asistencia de Codex en codigo, pruebas y documentacion. El equipo es responsable de revisar, comprender y explicar el codigo entregado.
