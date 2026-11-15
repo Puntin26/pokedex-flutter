@@ -1,216 +1,100 @@
 # Pokedex Flutter
 
-Proyecto de ICC-451-T Desarrollo de Aplicaciones Moviles, PUCMM. El objetivo es construir una Pokedex con Flutter, PokeAPI GraphQL y una base local observable, siguiendo Offline-First con preferencia por informacion actualizada.
+Avance del proyecto de ICC-451-T Desarrollo de Aplicaciones Moviles, PUCMM. La app consulta PokeAPI por GraphQL y guarda el catalogo en SQLite para usarlo sin Internet, incluso despues de cerrar y abrir la aplicacion.
 
-## Alcance del avance
+El catalogo muestra nombre, numero nacional, imagen y tipos. Incluye estados de carga, vacio y error con Reintentar, ademas de un indicador global de conectividad.
 
-La app muestra tarjetas con nombre, numero nacional, imagen y tipos, observadas exclusivamente desde SQLite mediante Riverpod. Al abrirla sincroniza sin bloquear la pantalla. Conserva carga, datos, vacio, error y Reintentar. Un indicador global con texto e icono distingue Online, Offline y servicio no disponible mediante una comprobacion real de GraphQL. Las imagenes ausentes o fallidas muestran un respaldo. No contiene datos simulados en la aplicacion.
+## Instalacion y ejecucion
 
-## Requisitos y ejecucion
+Se utilizo Flutter 3.50.0 con Dart 3.14.0. Se necesita Android Studio, Android SDK con licencias aceptadas y un emulador o dispositivo con depuracion USB. La compilacion Android usa SDK 36 y NDK 28.2.13676358. Para iOS se necesita macOS y Xcode, esa plataforma no se ha verificado.
 
-- Flutter estable 3.50.0 con Dart 3.14.0, version utilizada para preparar esta base.
-- Git y Android Studio con Android SDK, command-line tools y licencias aceptadas. La plantilla utiliza SDK Platform 36, build-tools 36.0.0 y NDK 28.2.13676358.
-- Un emulador Android o un dispositivo con depuracion USB.
-- Internet para descargar dependencias y herramientas en la primera compilacion.
-- Para iOS: macOS con Xcode y las herramientas que indique `flutter doctor`. El proyecto iOS se incluye como base; no se verifica su compilacion desde Windows.
-
-Ejecutar estos comandos desde esta carpeta, la que contiene `pubspec.yaml`:
+Abrir en Android Studio la carpeta que contiene `pubspec.yaml`, configurar el SDK Flutter y ejecutar desde esa carpeta:
 
 ```powershell
-flutter --version
 flutter doctor -v
 flutter pub get
 flutter devices
 flutter run -d <id-del-dispositivo>
 ```
 
-Agregar la carpeta `bin` del SDK Flutter al `PATH`. En Android Studio, abrir la carpeta que contiene `pubspec.yaml`, instalar los plugins Flutter y Dart y configurar la ruta del SDK.
+La primera instalacion requiere Internet para descargar dependencias. Si se cambian las tablas, regenerar Drift con `dart run build_runner build`. El archivo generado `app_database.g.dart` no se edita a mano.
 
-Comandos de verificacion:
+## Tecnologias
+
+- Flutter y Dart: plataforma y lenguaje del proyecto, `material_ui` aporta los componentes visuales.
+- Riverpod: comparte dependencias y observa el estado de la pantalla.
+- Drift y drift_flutter: SQLite con relaciones, transacciones y consultas que emiten cambios.
+- graphql: ejecuta consultas remotas sin conectar los widgets directamente a GraphQL.
+- connectivity_plus: detecta cambios de red, se complementa con una consulta al servicio.
+- drift_dev y build_runner: generan el codigo de la base. flutter_test y flutter_lints: pruebas y analisis.
+
+Las versiones estan fijadas en `pubspec.lock`.
+
+## Arquitectura y datos locales
+
+El codigo se organiza por funcionalidades y capas:
+
+```text
+lib/app/                 Configuracion e inyeccion de dependencias
+lib/core/                Base de datos, red y conectividad
+lib/features/pokemon/    presentation, domain y data
+lib/features/favorites/  Dominio y repositorio local, pantalla pendiente
+test/                    Pruebas automatizadas
+Documentacion/           Decision de arquitectura (ADR)
+```
+
+`presentation` muestra el estado, `domain` define entidades y contratos en Dart puro, y `data` implementa el acceso a datos. La UI observa SQLite mediante el repositorio y Riverpod. Las respuestas GraphQL solo actualizan la base local.
+
+La base `pokedex.sqlite`, esquema version 1, contiene `pokemon`, `type`, `pokemon_type`, `favorite` y `sync_metadata`. El ID remoto identifica cada Pokemon, distintas formas pueden compartir numero nacional. La relacion Pokemon-tipo tiene clave compuesta y una posicion unica por Pokemon. Cada favorito referencia un Pokemon y guarda su fecha.
+
+Las claves y restricciones evitan duplicados y referencias invalidas. Hay indices para ordenar el catalogo por numero/ID y favoritos por fecha/ID. La metadata guarda recurso, siguiente offset, total, estado, fecha de la ultima pagina confirmada, error y completitud. Los cambios futuros del esquema requieren migraciones que conserven los datos.
+
+## GraphQL y sincronizacion
+
+Se consulta `https://graphql.pokeapi.co/v1beta2` con `noCache`, paginas de 100 registros ordenados por ID y timeout de 30 segundos. Se solicitan identidad, numero nacional, tipos, URLs de imagen y total. `limit` indica cuantos registros pedir, `offset`, cuantos saltar.
+
+`PokemonSyncCoordinator` conecta `fetchPage()` con la validacion del DTO, el mapeo a dominio y `savePage()`. Cada pagina y su progreso se guardan en una transaccion con upsert: actualizar un ID existente no crea duplicados ni modifica favoritos. SQLite emite el cambio y la UI lo muestra mientras continua la descarga.
+
+La primera carga intenta descargar todo el catalogo sin bloquear la pantalla. El offset avanza por la cantidad guardada y termina al alcanzar el total. Una descarga incompleta reanuda el progreso confirmado, una completa comienza desde cero al actualizar. Reintentar permite recuperarse de un fallo y solicita reinicio si la respuesta era invalida.
+
+La instancia compartida del coordinador evita descargas simultaneas y libera el bloqueo en `finally`. Una respuesta fallida o incompleta no se guarda, si falla la transaccion, se revierte la pagina. Los datos anteriores se conservan. La paginacion por offset no garantiza una version fija del servidor y no elimina registros locales ausentes del remoto.
+
+## Conectividad e imagenes
+
+El indicador usa texto e icono: Online, Offline o Servicio no disponible, al iniciar muestra Comprobando conexion. Tener Wi-Fi no basta: se consulta `__typename` en GraphQL, sin cache y con timeout de 5 segundos. Se comprueba al iniciar, cambiar la red, volver a la app y cada 30 segundos.
+
+El monitor solo comprueba el servicio. La sincronizacion ocurre al abrir la app y al reintentar, no automaticamente al reconectar. Online tampoco significa que el catalogo ya este actualizado.
+
+Las imagenes usan la URL guardada y cache en memoria. Si no pueden cargarse, aparece Sin imagen. No se almacenan imagenes en disco para conservarlas tras reiniciar offline.
+
+## Verificacion
 
 ```powershell
-dart run build_runner build
 dart format --output=none --set-exit-if-changed lib test tool
 flutter analyze
 flutter test
 flutter build apk --debug
 ```
 
-`flutter doctor -v` valida la cadena Android. Su aviso sobre Visual Studio incompleto corresponde al destino Windows de escritorio, que no forma parte de esta base movil. iOS requiere verificacion posterior en macOS.
+El 15 de noviembre de 2026 se verificaron formato, analisis sin problemas, 69 pruebas aprobadas y APK Android debug correcto. Se comprobaron primera carga online/offline, reinicio sin Internet y fallo del servicio sin perder el catalogo. Las pruebas automatizadas cubren tambien reanudacion, rollback, concurrencia y tres sincronizaciones sin duplicados ni perdida de favoritos.
 
-## Dependencias y decisiones iniciales
-
-| Dependencia | Responsabilidad y justificacion |
-|---|---|
-| Flutter / Dart | Plataforma y lenguaje exigidos; widgets Material para la base movil. |
-| `material_ui` | Biblioteca Material oficial utilizada por la plantilla de Flutter 3.50; evita usar el import Material obsoleto del SDK. |
-| `flutter_riverpod` | Inyeccion de base, repositorio y coordinador compartidos; streams locales y estados del catalogo. Se elige frente a BLoC para reducir clases iniciales. |
-| `drift` | Consultas SQLite reactivas, transacciones y restricciones para persistencia estructurada. Se elige frente a guardar JSON o depender de una cache remota, que no satisfacen la fuente local observable. |
-| `drift_flutter` | Abre `pokedex.sqlite` en el directorio de documentos de la aplicacion y ejecuta SQLite en segundo plano, sin integracion nativa propia. |
-| `graphql` | Transporte GraphQL de la capa de datos, con consultas `noCache`; los widgets no consumen respuestas remotas. Se elige frente a `graphql_flutter` para separar transporte y presentacion. |
-| `connectivity_plus` | Eventos y consulta de disponibilidad de red, complementados con una comprobacion pequena de GraphQL. Tener Wi-Fi no garantiza acceso al servicio. |
-| `drift_dev` / `build_runner` | Generan las tablas y consultas tipadas de Drift. `app_database.g.dart` se versiona y no debe editarse manualmente. Se omite la API Manager generada porque usamos consultas explicitas. |
-| `flutter_test` / `flutter_lints` | Pruebas de datos, sincronizacion y pantalla; reglas de analisis estatico. |
-
-`pubspec.yaml` declara las dependencias directas y `pubspec.lock` fija las versiones resueltas para reproducir la instalacion. No se agregan generadores de Riverpod, librerias de navegacion ni paquetes visuales adicionales.
-
-## Estructura y responsabilidades
-
-```text
-lib/
-  main.dart                         # Arranque y ProviderScope
-  app/
-    app.dart                        # MaterialApp y catalogo
-    pokemon_dependencies.dart       # Instancias compartidas y liberacion de recursos
-    connection_status_provider.dart # Monitor compartido, eventos y ciclo de vida
-  core/
-    database/                       # Tablas, apertura, migraciones y codigo generado
-    domain/                         # Metadata y fallos de sincronizacion, Dart puro
-    network/                        # Cliente GraphQL, timeout y comprobacion de salud
-    connectivity/                   # Disponibilidad de red/servicio e indicador global
-  features/
-    pokemon/
-      presentation/                 # Providers, estado y pantalla del catalogo local
-      domain/                       # Pokemon, tipos, contratos de repositorio y sync
-      data/                         # Repositorio local, fuente GraphQL, DTO y coordinador
-    favorites/
-      presentation/
-      domain/                       # Favorito y contrato del repositorio
-      data/                         # Alta, baja y observacion local de favoritos
-test/
-  app_test.dart                     # Estados, reintento, SQLite -> UI y arranque no bloqueante
-  local_persistence_test.dart       # SQLite real en memoria y archivo temporal
-  pokemon_page_dto_test.dart        # Mapeo y rechazo de respuestas invalidas
-  remote_pokemon_source_test.dart   # Transporte HTTP local, timeout y errores
-  pokemon_sync_test.dart            # Paginacion, reanudacion y transacciones reales
-  pokemon_card_test.dart            # Tarjetas, imagen local HTTP y respaldo
-  connection_status_test.dart       # Indicador, eventos, ciclo de vida y descarte
-  pokeapi_service_probe_test.dart   # Salud de GraphQL sin cache y timeout
-tool/
-  pokeapi_smoke_test.dart           # Comprobacion manual acotada con Internet
-android/                            # Proyecto anfitrion Android
-ios/                                # Proyecto anfitrion iOS
-Documentacion/                      # ADR y diagramas de la arquitectura
-```
-
-Los archivos `.gitkeep` conservan las carpetas reservadas en Git; no son implementaciones. Las capas restantes se completaran segun la lista de tareas.
-
-Direccion de dependencias: `data` implementa contratos de `domain` y utiliza infraestructura de `core`. Las entidades y contratos son Dart puro, sin Flutter, Drift ni GraphQL. `app/pokemon_dependencies.dart` conecta las implementaciones; la presentacion utiliza contratos y entidades sin consultar SQLite ni GraphQL directamente.
-
-## Persistencia local implementada
-
-`AppDatabase` define el esquema SQLite version **1** y activa `PRAGMA foreign_keys = ON` en cada apertura. Su constructor normal abre la base mediante `drift_flutter`; tambien acepta un `QueryExecutor` para pruebas. La conexion es diferida: se abre con la primera consulta. `appDatabaseProvider` comparte la instancia entre consumidores y registra `close()` al liberar su alcance.
-
-| Tabla | Campos y restricciones |
-|---|---|
-| `pokemon` | `id` remoto positivo como PK; `national_number` positivo; `name` no vacio; `image_url` opcional; `updated_at` obligatorio. El numero nacional no es unico: distintas formas pueden compartirlo. |
-| `type` | `id` remoto positivo como PK y `name` unico, no vacio. |
-| `pokemon_type` | FKs a Pokemon y tipo; PK compuesta `(pokemon_id, type_id)`; unicidad de `(pokemon_id, slot)`; `slot` entre 1 y 2. Al borrar un Pokemon se eliminan sus relaciones de tipos. |
-| `favorite` | `pokemon_id` es PK y FK; `created_at` obligatorio. Un favorito impide borrar accidentalmente el Pokemon asociado. |
-| `sync_metadata` | `resource_key` no vacio como PK; `next_offset` no negativo (inicial 0); `total_count` opcional y no negativo; `status`; `last_success_at` y `last_error` opcionales; `is_complete` inicialmente falso. |
-
-Indices: `pokemon_national_order(national_number, id)` apoya el orden del catalogo; `favorite_creation_order(created_at, pokemon_id)` apoya favoritos recientes primero. Las PK y restricciones unicas generan los indices para identidad, joins y orden de tipos por Pokemon. No se agregan indices de busqueda o filtros todavia, pues esas consultas no pertenecen a esta tarea.
-
-`LocalPokemonRepository.watchCatalog()` devuelve Pokemon ordenados por numero e ID, con tipos ordenados por `slot`; `watchTypes()` observa los tipos por nombre. Los joins tambien observan las tablas relacionadas. El mapper devuelve entidades del dominio, nunca filas de Drift. `LocalFavoritesRepository` permite observar favoritos con sus Pokemon y tipos, agregar y eliminar. Repetir un alta conserva su fecha original.
-
-`savePage(pokemon, metadata)` ejecuta una sola transaccion: hace `upsert` por ID de Pokemon y tipos, reemplaza las relaciones de tipos de los Pokemon recibidos y guarda la metadata al final. Cualquier fallo revierte **toda** la pagina y su progreso. No borra Pokemon ausentes de esa pagina ni modifica favoritos. Usa actualizacion por conflicto, sin reemplazar la fila referenciada por los datos del usuario. Una pagina repetida no duplica entidades.
-
-La metadata se consulta con `readSyncMetadata()` o `watchSyncMetadata()` por recurso (`pokemon_catalog`); antes del primer registro devuelve `null`. `next_offset` representa el siguiente offset **confirmado**, `total_count` el total remoto conocido, `last_success_at` la ultima pagina confirmada y `is_complete` si se llego al final del catalogo. `status` admite `idle`, `syncing`, `success` y `failed`; describe sincronizacion, no disponibilidad de red. `updateSyncStatus()` registra actividad o errores sin cambiar offset, total, ultima fecha correcta ni completitud. El coordinador limpia `last_error` al empezar y calcula el progreso de cada pagina.
-
-Las fechas se almacenan como timestamps SQLite con precision de segundos y se entregan al dominio en UTC. `image_url` guarda una referencia, no descarga ni garantiza disponibilidad offline de imagenes.
-
-Migraciones: una instalacion nueva crea todas las tablas. No existe un esquema previo que migrar. Se conserva el esquema inicial en `drift_schemas/drift_schema_v1.json`, exportado con `dart run drift_dev schema dump lib/core/database/app_database.dart drift_schemas/`. Los cambios futuros deben incrementar `schemaVersion`, agregar una migracion explicita y probar conservacion de datos; una transicion sin implementar falla en vez de borrar la base. Favoritos deben conservarse tambien durante las migraciones. `build.yaml` identifica la base para las herramientas de migracion.
-
-## Flujo GraphQL a SQLite implementado
-
-El recorrido se localiza en `PokemonSyncCoordinator._synchronize()`: `remote.fetchPage()` -> `PokemonPageDto.fromJson()` -> `toDomain()` -> `local.savePage()`. Este ultimo metodo hace los `upsert` y confirma los datos y la metadata en la misma transaccion. Los streams del repositorio local emiten el cambio. `domain/PokemonSync` permite solicitar sincronizacion sin exponer GraphQL o Drift a la presentacion; los fallos se expresan con `SyncFailure` de Dart puro.
-
-### Consulta y paginacion
-
-`GraphqlPokemonSource.fetchPage()` ejecuta `PokemonCatalog` por POST contra `https://graphql.pokeapi.co/v1beta2`, comprobado el 15 de noviembre de 2026. Se usa el esquema sin el antiguo prefijo `pokemon_v2_`. La consulta solicita solamente ID, nombre, `pokemon_species_id`, tipos con su `slot`, dos URLs de imagen extraidas del JSON mediante `sprites(path: ...)` y el conteo agregado. Incluye formas alternativas: el ID identifica la forma, mientras `pokemon_species_id` representa su numero nacional. Se prefiere official-artwork y se usa el sprite frontal como respaldo; ambos pueden ser nulos. GraphQL solo entrega las URLs; las tarjetas cargan las imagenes referenciadas por los datos locales.
-
-La pagina predeterminada contiene **100 registros**: reduce solicitudes al servicio limitado por tasa y mantiene acotado el trabajo por transaccion. `pageSize` acepta 1 a 100 para pruebas o configuracion. `limit` es cuantos registros pedir y `offset` cuantos saltar, nunca un ID. El orden remoto es `id ASC`, unico y estable; los tipos se piden por `slot ASC`. El orden visual local sigue siendo numero nacional e ID.
-
-Cada respuesta incluye `pokemon_aggregate.aggregate.count`. La pagina debe contener exactamente `min(limit, total - offset)` filas. Se valida toda la pagina antes de guardar: campos requeridos, IDs y numero positivos, nombres, URLs HTTPS cuando existen, uno o dos tipos sin repeticiones y slots 1 a 2. Un campo ausente no se interpreta como un valor nulo valido. Los IDs de la pagina deben crecer; durante un intento tampoco pueden retroceder entre paginas.
-
-Tras confirmar la transaccion, `nextOffset = offset + cantidad recibida`. Se termina cuando `nextOffset == total`; asi no se necesita una solicitud vacia extra cuando el total es multiplo del limite. Un catalogo remoto realmente vacio confirma offset 0 y completitud sin borrar filas locales previas. Una pagina vacia inesperada, truncada o con errores falla en vez de avanzar o repetir indefinidamente. El total debe mantenerse igual durante el intento y al reanudar: si cambia, se registra el error y se requiere `synchronize(restart: true)`.
-
-### Reanudacion, concurrencia y fallos
-
-- Sin metadata se comienza en 0. Si el catalogo esta incompleto, se reanuda en el siguiente offset confirmado, incluso si el proceso anterior termino con estado `syncing` o `failed`. Cambiar el tamano de pagina no invalida ese offset.
-- Si la descarga anterior quedo completa, una nueva llamada comienza en 0 para actualizar las filas. `restart: true` tambien comienza en 0. No se borra el catalogo para reiniciar: hasta confirmar la primera pagina se conserva la metadata anterior; si esta falla, el siguiente intento normal usa ese progreso anterior. Para volver a forzar el inicio se indica nuevamente `restart: true`.
-- La inyeccion comparte **una instancia de `PokemonSyncCoordinator` por catalogo**, junto con su repositorio y base. Sus llamadas simultaneas devuelven el mismo `Future`: no lanzan otra consulta, y prevalecen las opciones de la primera llamada. El bloqueo se libera con `finally` tanto en exito como en error. No es un bloqueo entre procesos, isolates o instancias independientes.
-- Cada pagina intermedia queda `syncing`; la ultima queda `success` e `is_complete = true`. `last_success_at` es la fecha de la ultima pagina confirmada, no necesariamente de una descarga completa. Durante una actualizacion o un error, `is_complete` conserva la completitud del ultimo progreso confirmado hasta guardar una nueva pagina.
-- Los errores remotos o de validacion no escriben esa pagina. Un fallo SQLite revierte la pagina y su metadata. El coordinador registra `failed` y `last_error`, conserva offset, fecha correcta y favoritos, y entrega un `SyncFailure`. Si SQLite tampoco permite registrar el error, se propaga el fallo original y se libera igualmente el bloqueo.
-- `createPokeApiClient()` limita cada solicitud a **30 segundos** con un link que cierra la espera al vencer el timeout; una respuesta tardia no se procesa. Se desactiva el timeout adicional del cliente para mantener un solo temporizador. Se distinguen timeout, conexion, HTTP de servicio no disponible, HTTP 429, errores GraphQL, respuesta invalida y almacenamiento. Incluso si GraphQL entrega datos junto con errores, se rechaza la pagina completa. Las consultas usan `FetchPolicy.noCache`: SQLite sigue siendo la fuente persistente.
-
-Quien cree el cliente debe ejecutar `client.link.dispose()` al terminar, y cerrar la base con `database.close()`. El manifiesto Android principal declara `INTERNET`, tambien para las futuras compilaciones release. No se agregaron dependencias ni se cambio el esquema SQLite.
-
-La paginacion por offset no ofrece un snapshot del servidor: un cambio de contenido que conserve el total puede pasar inadvertido entre intentos. Un reinicio desde cero vuelve a obtener las filas sin borrar datos locales ausentes ni favoritos. La deteccion completa de eliminaciones y la politica de vigencia quedan pendientes para el proyecto final.
-
-### Verificacion del flujo
-
-La suite `flutter test --no-pub` usa respuestas controladas y un servidor HTTP de loopback, sin depender de Internet. Verifica mapeo, campos parciales, HTTP 429/503, timeout y respuesta tardia, multiples paginas, total exacto o cero, rollback real de SQLite, streams locales, reanudacion tras reapertura en disco, llamadas simultaneas, liberacion del bloqueo y tres sincronizaciones sin duplicar ni perder favoritos. Se conservan las 15 pruebas anteriores.
-
-La comprobacion manual usa solo **dos solicitudes de dos registros**, sin descargar el catalogo completo ni alterar la base de la app:
-
-```powershell
-flutter test --no-pub tool/pokeapi_smoke_test.dart --reporter expanded
-```
-
-Esa prueba usa el transporte real, DTO y SQLite; confirma dos paginas, metadata, repeticion local sin duplicados y conservacion de un favorito. Se ejecuta aparte porque requiere Internet y disponibilidad de PokeAPI.
-
-## Catalogo local reactivo
-
-`app/pokemon_dependencies.dart` crea una base, cliente, repositorio y coordinador por `ProviderScope`. Los providers se conservan durante ese alcance: reconstruir widgets o volver al catalogo no crea otra instancia ni dispara otra descarga. Al descartar el alcance se cierra la base y se libera `client.link`; el controlador ignora los resultados tardios y atiende los fallos aunque su pantalla ya no exista. Un cierre forzado del proceso depende de la atomicidad de SQLite y de la reanudacion del coordinador.
-
-En `presentation/pokemon_catalog_controller.dart`, `localCatalogProvider` observa `watchCatalog()` y `catalogMetadataProvider` observa `watchSyncMetadata('pokemon_catalog')`. `pokemonCatalogStateProvider` compone esos streams y el resultado de la accion en `PokemonCatalogState`: carga, datos, vacio o error, actividad de sincronizacion y mensaje. Los widgets reciben entidades de dominio; nunca reciben DTO, respuestas GraphQL o filas Drift.
-
-`CatalogSyncController.build()` programa el primer intento sin esperarlo. `PokemonPage` aparece de inmediato; cada pagina confirmada en SQLite actualiza la lista aunque la siguiente descarga siga pendiente. Con datos guardados, la lista permanece desplazable durante la actualizacion o ante un fallo. Se usa `ListView.builder` para construir solo las tarjetas necesarias. El texto de actualizacion es local al catalogo y permanece separado del indicador de disponibilidad del servicio.
-
-`Reintentar` reutiliza el mismo coordinador y reanuda el offset confirmado. Si la respuesta es invalida, solicita `restart: true` en el siguiente intento para permitir recuperarse de un total remoto que cambio. Reiniciar no borra filas ni favoritos. Los fallos locales de lectura vuelven a suscribir sus streams al reintentar. No hay reintentos automaticos, backoff ni eventos de reconexion. Si SQLite tampoco permite registrar un fallo, el controlador muestra el error de la accion para evitar una espera indefinida o una excepcion sin atender.
-
-Las pruebas de pantalla usan SQLite real en memoria, el coordinador existente y respuestas controladas, sin Internet. Cubren arranque inmediato, carga, vacio, datos previos, fallo remoto con y sin datos, reintento, reanudacion, reinicio por cambio remoto, emisiones de datos y metadata, fallos locales y descarte durante una descarga. Una prueba mantiene pendiente la segunda pagina y comprueba datos de la primera en pantalla, desplazamiento, navegacion y reconstruccion sin descargas duplicadas. La ruta adicional existe solo en la prueba. La demostracion de reinicio offline debe comprobarse en Android.
-
-## Catalogo visual y conectividad
-
-`PokemonCard` recibe una entidad del catalogo local y muestra nombre, numero nacional y todos sus tipos (uno o dos). La imagen usa la URL guardada, ocupa un espacio de 88 x 88 y se decodifica con ancho de 176 pixeles. Mientras carga muestra un icono; si falta la URL o falla la descarga, muestra `Sin imagen` sin ocultar los datos ni interrumpir la lista. Los tipos usan `Wrap` y el nombre puede ocupar varias lineas.
-
-Se usa `Image.network` y la cache acotada en memoria de Flutter, sin agregar dependencias. **No hay cache de imagenes en disco**: al reiniciar sin Internet no se garantiza conservarlas; las no disponibles usan el respaldo. Esto no afecta la persistencia SQLite del catalogo. El almacenamiento duradero de imagenes queda para el proyecto final.
-
-`connectionMonitorProvider` combina `connectivity_plus` con `PokeApiServiceProbe`. Este ultimo ejecuta `query ServiceHealth { __typename }` por el mismo endpoint de PokeAPI, con `noCache` y un cliente con timeout de **5 segundos**. Una respuesta valida sin errores confirma Online; sin red indica Offline; con red y fallo de GraphQL indica `Servicio no disponible`. Al iniciar se muestra `Comprobando conexion...`; un error al detectar la red tampoco se presenta como Online.
-
-`ConnectionStatusController` comprueba al iniciar, al cambiar la red, al volver a la app y cada **30 segundos**. Una respuesta anterior no puede sobrescribir un cambio de red mas reciente. El alcance compartido cancela la suscripcion, el temporizador y el observador de ciclo de vida, y libera el cliente al descartarse. El indicador vive en el `builder` de `MaterialApp`, fuera del Navigator; mantiene su posicion al cambiar de ruta y combina texto, icono y etiqueta Semantics.
-
-La disponibilidad no implica que el catalogo ya este actualizado: el estado de sincronizacion sigue en su controlador y metadata locales. Las comprobaciones del indicador no descargan ni actualizan el catalogo; la sincronizacion automatica al reconectar, el backoff y el indicador completo de sincronizacion del proyecto final siguen pendientes.
-
-### Simular GraphQL inaccesible con red activa
-
-Con datos sincronizados y la red encendida, compilar e instalar una version de prueba:
+Para simular el servicio inaccesible con red activa y datos ya guardados:
 
 ```powershell
 flutter build apk --debug --dart-define=POKEAPI_ENDPOINT=https://127.0.0.1:1
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 
-Forzar el cierre y abrir desde el icono. Debe mostrar `Servicio no disponible` y conservar el catalogo local. El parametro afecta tanto la consulta del catalogo como la comprobacion de salud; solo cambia esa compilacion. Para recuperar el servicio normal, recompilar sin `--dart-define`, reinstalar con `-r` y reabrir. No desinstalar ni borrar datos. Este mecanismo no implementa backoff ni sincronizacion automatica al reconectar.
+Cerrar y abrir la app: debe conservar el catalogo y mostrar Servicio no disponible. Para restaurarla, compilar sin `--dart-define`, reinstalar con `-r` y reabrir, sin desinstalar ni borrar datos.
 
-## Limites conocidos
+## Limites y documentacion
 
-Las exclusiones de Git evitan versionar compilaciones, caches, configuracion local del SDK, archivos del IDE y credenciales. Se versiona `pubspec.lock` para reproducir las dependencias.
+Quedan pendientes detalle, pantalla de favoritos, busqueda, filtros y trivia. Favoritos ya tiene persistencia y repositorio probados. Tambien faltan cache de imagenes en disco, politica de vigencia, reintentos con backoff y sincronizacion al reconectar. El indicador aun no integra Sincronizando ni la fecha de actualizacion. No se agregaron funcionalidades complementarias.
 
-Se verificaron primera carga con y sin conexion, reinicio offline del catalogo, reintento y servicio inaccesible con red activa en Android. Las 69 pruebas cubren ademas concurrencia, reanudacion, navegacion con descarga pendiente y tres sincronizaciones sin duplicados ni perdida de favoritos. Formato, analisis y APK debug correctos. La base original se respaldo y restauro; sus conteos son 1351 Pokemon, 18 tipos y 2116 relaciones, con integridad SQLite correcta. Las imagenes siguen sin persistencia en disco y la actualizacion al reconectar requiere reintento manual.
+La decision principal esta en [ADR-001](<Documentacion/ADR-001 - Fuente local observable.md>).
 
-## Fuentes y autoria
+El proyecto sigue los enunciados del avance y del proyecto final. Referencias: [Flutter](https://docs.flutter.dev/), [Drift](https://drift.simonbinder.eu/), [Riverpod](https://riverpod.dev/) y [PokeAPI GraphQL](https://pokeapi.co/docs/graphql).
 
-- Enunciados del avance y del proyecto final de la asignatura ICC-451-T, PUCMM.
-- [Instalacion oficial de Flutter](https://docs.flutter.dev/install/manual).
-- [Biblioteca Material oficial](https://pub.dev/packages/material_ui).
-- [Configuracion de Drift](https://drift.simonbinder.eu/setup/).
-- [Riverpod](https://riverpod.dev/).
-- [Cliente GraphQL para Dart](https://pub.dev/packages/graphql).
-- [Endpoint, esquema y limites oficiales de PokeAPI GraphQL](https://pokeapi.co/docs/graphql).
-- [Alcance y limites de connectivity_plus](https://pub.dev/packages/connectivity_plus).
-- [Carga y manejo de imagenes de Flutter](https://api.flutter.dev/flutter/widgets/Image/Image.network.html).
+Integrantes: Ian Alvarez y Willian Li Liang.
 
-La aplicacion utiliza la plantilla oficial de Flutter y asistencia de Codex en codigo, pruebas y documentacion. El equipo es responsable de revisar, comprender y explicar el codigo entregado.
+Se uso la plantilla oficial de Flutter y asistencia de Codex en codigo, pruebas y documentacion.
