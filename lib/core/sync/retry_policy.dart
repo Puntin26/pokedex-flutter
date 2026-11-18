@@ -55,6 +55,7 @@ class RetryPolicy {
   Future<T> run<T>(
     Future<T> Function() action, {
     String label = 'sincronizacion',
+    void Function(Duration delay)? onRetry,
   }) async {
     for (var retry = 1; ; retry++) {
       try {
@@ -74,6 +75,7 @@ class RetryPolicy {
           '[sync] $label: fallo $failure; reintento $retry/$maxRetries '
           'en ${delay.inMilliseconds} ms',
         );
+        onRetry?.call(delay);
         await _wait(delay);
       }
     }

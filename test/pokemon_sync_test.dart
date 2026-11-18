@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokedex/core/database/app_database.dart';
+import 'package:pokedex/core/domain/sync_activity.dart';
 import 'package:pokedex/core/domain/sync_failure.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
 import 'package:pokedex/core/sync/retry_policy.dart';
@@ -451,4 +452,85 @@ void main() {
       expect(metadata.lastError, contains('timeout'));
     },
   );
+
+  group('Actividad de sincronizacion (1.2)', () {
+    Future<List<SyncActivity>> record(Future<void> Function() action) async {
+      final events = <SyncActivity>[];
+      final subscription = sync.watchActivity().listen(events.add);
+      try {
+        await action();
+      } on SyncFailure {
+        // El fallo es parte del escenario; se revisa con los eventos.
+      }
+      await pumpEventQueue();
+      await subscription.cancel();
+      return events;
+    }
+
+    test('Empieza idle y vuelve a idle tras una sync exitosa', () async {
+      expect(sync.activity, SyncActivity.idle);
+      final events = await record(sync.synchronize);
+      expect(events.first, SyncActivity.idle);
+      expect(events, containsAllInOrder([SyncActivity.syncing]));
+      expect(events.last, SyncActivity.idle);
+      expect(events, isNot(contains(SyncActivity.waitingRetry)));
+      expect(sync.activity, SyncActivity.idle);
+    });
+
+    test('Pasa por waitingRetry durante el backoff y luego syncing', () async {
+      final original = remote.respond;
+      var failures = 1;
+      remote.respond = (limit, offset) async {
+        if (offset == 2 && failures-- > 0) {
+          throw const SyncFailure(SyncFailureKind.timeout, 'lento');
+        }
+        return original(limit, offset);
+      };
+      final seenWhileWaiting = <SyncActivity>[];
+      sync = PokemonSyncCoordinator(
+        remote: remote,
+        local: local,
+        pageSize: 2,
+        retryPolicy: RetryPolicy(
+          wait: (_) async => seenWhileWaiting.add(sync.activity),
+          log: (_) {},
+        ),
+      );
+
+      final events = await record(sync.synchronize);
+
+      expect(seenWhileWaiting, [SyncActivity.waitingRetry]);
+      expect(
+        events,
+        containsAllInOrder([
+          SyncActivity.syncing,
+          SyncActivity.waitingRetry,
+          SyncActivity.syncing,
+          SyncActivity.idle,
+        ]),
+      );
+    });
+
+    test('Queda failed si se rinde y se limpia en la siguiente sync', () async {
+      final original = remote.respond;
+      remote.respond = (limit, offset) async =>
+          throw const SyncFailure(SyncFailureKind.invalidResponse, 'malo');
+
+      final failedEvents = await record(sync.synchronize);
+      expect(failedEvents.last, SyncActivity.failed);
+      expect(sync.activity, SyncActivity.failed);
+
+      remote.respond = original;
+      final events = await record(() => sync.synchronize(restart: true));
+      expect(events.first, SyncActivity.failed);
+      expect(events.last, SyncActivity.idle);
+    });
+
+    test('El fallo de almacenamiento tambien deja failed', () async {
+      final failing = FailingLocal(database);
+      sync = PokemonSyncCoordinator(remote: remote, local: failing);
+      await record(sync.synchronize);
+      expect(sync.activity, SyncActivity.failed);
+    });
+  });
 }
