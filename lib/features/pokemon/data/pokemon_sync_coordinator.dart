@@ -15,7 +15,9 @@ class PokemonSyncCoordinator implements PokemonSync {
     required this.local,
     this.pageSize = 100,
     RetryPolicy? retryPolicy,
-  }) : retryPolicy = retryPolicy ?? RetryPolicy.none() {
+    DateTime Function()? clock,
+  }) : retryPolicy = retryPolicy ?? RetryPolicy.none(),
+       _clock = clock ?? DateTime.now {
     if (pageSize < 1 || pageSize > 100) {
       throw ArgumentError.value(
         pageSize,
@@ -30,6 +32,7 @@ class PokemonSyncCoordinator implements PokemonSync {
   final PokemonRepository local;
   final int pageSize;
   final RetryPolicy retryPolicy;
+  final DateTime Function() _clock;
   Future<void>? _activeSync;
   SyncActivity _activity = SyncActivity.idle;
   final _activityChanges = StreamController<SyncActivity>.broadcast(sync: true);
@@ -66,7 +69,16 @@ class PokemonSyncCoordinator implements PokemonSync {
     _setActivity(SyncActivity.syncing);
     try {
       final previous = await local.readSyncMetadata(resourceKey);
-      final resume = !restart && previous != null && !previous.isComplete;
+      // Reanuda cualquier descarga cortada, sea la primera o una actualizacion.
+      final total = previous?.totalCount;
+      final resume =
+          !restart &&
+          previous != null &&
+          total != null &&
+          previous.nextOffset < total;
+      // Si el catalogo local ya estaba completo, esta sync es una actualizacion:
+      // sigue completo y conserva su fecha hasta confirmar la ultima pagina.
+      final refreshing = previous?.isComplete ?? false;
       var offset = resume ? previous.nextOffset : 0;
       int? expectedTotal = resume ? previous.totalCount : null;
       var previousId = 0;
@@ -95,7 +107,7 @@ class PokemonSyncCoordinator implements PokemonSync {
             'El catalogo remoto cambio durante la paginacion. Reinicie la sincronizacion.',
           );
         }
-        final savedAt = DateTime.now().toUtc();
+        final savedAt = _clock().toUtc();
         final pokemon = page.toDomain(savedAt);
         final nextOffset = offset + pokemon.length;
         final complete = nextOffset == page.totalCount;
@@ -108,8 +120,10 @@ class PokemonSyncCoordinator implements PokemonSync {
             nextOffset: nextOffset,
             totalCount: page.totalCount,
             status: complete ? SyncStatus.success : SyncStatus.syncing,
-            lastSuccessAt: savedAt,
-            isComplete: complete,
+            lastSuccessAt: complete || !refreshing
+                ? savedAt
+                : previous?.lastSuccessAt,
+            isComplete: complete || refreshing,
           ),
         );
         if (complete) {

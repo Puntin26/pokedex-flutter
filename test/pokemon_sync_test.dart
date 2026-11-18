@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokedex/core/database/app_database.dart';
@@ -532,5 +533,101 @@ void main() {
       await record(sync.synchronize);
       expect(sync.activity, SyncActivity.failed);
     });
+  });
+
+  group('Vigencia y restauracion del catalogo (1.4)', () {
+    test(
+      'OF-19: una sync restaura nombre, imagen y tipos alterados localmente',
+      () async {
+        final favorites = LocalFavoritesRepository(database);
+        await sync.synchronize();
+        final original = await local.watchCatalog().first;
+        await favorites.addFavorite(1, DateTime.utc(2026));
+
+        // Simula la edicion manual de PA-16 con un inspector de base de datos.
+        await (database.update(
+          database.pokemonRecords,
+        )..where((row) => row.id.equals(1))).write(
+          const PokemonRecordsCompanion(
+            name: Value('alterado'),
+            imageUrl: Value('https://falso/1.png'),
+          ),
+        );
+        await (database.delete(
+          database.pokemonTypeLinks,
+        )..where((row) => row.pokemonId.equals(2))).go();
+        final firstType = original.first.types.first.type;
+        await (database.update(database.pokemonTypes)
+              ..where((row) => row.id.equals(firstType.id)))
+            .write(const PokemonTypesCompanion(name: Value('tipo-falso')));
+        await (database.delete(
+          database.pokemonRecords,
+        )..where((row) => row.id.equals(5))).go();
+
+        await sync.synchronize();
+
+        final restored = await local.watchCatalog().first;
+        expect(
+          restored.map((p) => (p.id, p.name, p.imageUrl)),
+          original.map((p) => (p.id, p.name, p.imageUrl)),
+        );
+        expect(
+          restored.map((p) => p.types.map((t) => (t.slot, t.type.name))),
+          original.map((p) => p.types.map((t) => (t.slot, t.type.name))),
+        );
+        expect(await favorites.watchFavorites().first, hasLength(1));
+      },
+    );
+
+    test(
+      'Re-sync de un catalogo completo no lo marca parcial ni cambia la fecha '
+      'hasta terminar',
+      () async {
+        await sync.synchronize();
+        final before = (await local.readSyncMetadata(resource))!;
+        expect(before.isComplete, isTrue);
+
+        final original = remote.respond;
+        remote.respond = (limit, offset) async {
+          if (offset == 2) {
+            throw const SyncFailure(SyncFailureKind.network, 'sin red');
+          }
+          return original(limit, offset);
+        };
+        await expectLater(sync.synchronize(), throwsA(isA<SyncFailure>()));
+
+        final interrupted = (await local.readSyncMetadata(resource))!;
+        expect(interrupted.isComplete, isTrue);
+        expect(interrupted.nextOffset, 2);
+        expect(interrupted.lastSuccessAt, before.lastSuccessAt);
+        expect(interrupted.status, SyncStatus.failed);
+
+        // Reanuda la actualizacion interrumpida y al terminar renueva la fecha.
+        remote.respond = original;
+        remote.offsets.clear();
+        final later = before.lastSuccessAt!.add(const Duration(hours: 1));
+        await PokemonSyncCoordinator(
+          remote: remote,
+          local: local,
+          pageSize: 2,
+          clock: () => later,
+        ).synchronize();
+        expect(remote.offsets, [2, 4]);
+        final after = (await local.readSyncMetadata(resource))!;
+        expect(after.isComplete, isTrue);
+        expect(after.nextOffset, 5);
+        expect(after.lastSuccessAt, later);
+      },
+    );
+
+    test(
+      'Tras completar, la siguiente sync vuelve a empezar en cero',
+      () async {
+        await sync.synchronize();
+        remote.offsets.clear();
+        await sync.synchronize();
+        expect(remote.offsets, [0, 2, 4]);
+      },
+    );
   });
 }
