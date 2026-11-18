@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:pokedex/core/database/app_database.dart';
 import 'package:pokedex/core/domain/sync_failure.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
+import 'package:pokedex/core/sync/retry_policy.dart';
 import 'package:pokedex/features/favorites/data/local_favorites_repository.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_sync_coordinator.dart';
@@ -383,6 +384,71 @@ void main() {
         await disk.close();
         await directory.delete(recursive: true);
       }
+    },
+  );
+
+  test('Reintenta con backoff una pagina con fallo temporal sin repetir las guardadas', () async {
+    final waits = <Duration>[];
+    final logs = <String>[];
+    final original = remote.respond;
+    var failures = 2;
+    remote.respond = (limit, offset) async {
+      if (offset == 2 && failures-- > 0) {
+        throw const SyncFailure(SyncFailureKind.serviceUnavailable, '503');
+      }
+      return original(limit, offset);
+    };
+    sync = PokemonSyncCoordinator(
+      remote: remote,
+      local: local,
+      pageSize: 2,
+      retryPolicy: RetryPolicy(
+        wait: (delay) async => waits.add(delay),
+        maxJitter: Duration.zero,
+        log: logs.add,
+      ),
+    );
+
+    await sync.synchronize();
+
+    expect(remote.offsets, [0, 2, 2, 2, 4]);
+    expect(waits, [const Duration(seconds: 2), const Duration(seconds: 4)]);
+    expect(logs, hasLength(2));
+    expect(await local.watchCatalog().first, hasLength(5));
+    final metadata = (await local.readSyncMetadata(resource))!;
+    expect(metadata.status, SyncStatus.success);
+    expect(metadata.lastError, isNull);
+  });
+
+  test(
+    'Reintentos agotados marcan failed y conservan las paginas guardadas',
+    () async {
+      final original = remote.respond;
+      remote.respond = (limit, offset) async {
+        if (offset == 2) {
+          throw const SyncFailure(SyncFailureKind.timeout, 'sin respuesta');
+        }
+        return original(limit, offset);
+      };
+      sync = PokemonSyncCoordinator(
+        remote: remote,
+        local: local,
+        pageSize: 2,
+        retryPolicy: RetryPolicy(
+          maxRetries: 2,
+          wait: (_) async {},
+          log: (_) {},
+        ),
+      );
+
+      await expectLater(sync.synchronize(), throwsA(isA<SyncFailure>()));
+
+      expect(remote.offsets, [0, 2, 2, 2]);
+      expect(await local.watchCatalog().first, hasLength(2));
+      final metadata = (await local.readSyncMetadata(resource))!;
+      expect(metadata.status, SyncStatus.failed);
+      expect(metadata.nextOffset, 2);
+      expect(metadata.lastError, contains('timeout'));
     },
   );
 }

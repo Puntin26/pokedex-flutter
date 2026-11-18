@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/database/app_database.dart';
 import '../core/network/pokeapi_graphql_client.dart';
+import '../core/sync/retry_policy.dart';
 import '../features/pokemon/data/local_pokemon_repository.dart';
 import '../features/pokemon/data/pokemon_sync_coordinator.dart';
 import '../features/pokemon/data/remote_pokemon_source.dart';
@@ -31,5 +32,6 @@ final pokemonSyncProvider = Provider<PokemonSync>((ref) {
   return PokemonSyncCoordinator(
     remote: GraphqlPokemonSource(ref.watch(pokeApiClientProvider)),
     local: ref.watch(pokemonRepositoryProvider),
+    retryPolicy: RetryPolicy(),
   );
 });
