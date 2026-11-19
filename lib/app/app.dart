@@ -1,7 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../core/connectivity/connection_indicator.dart';
+import 'connection_indicator.dart';
 import '../features/pokemon/presentation/pokemon_page.dart';
 import 'sync_scheduler_provider.dart';
 
