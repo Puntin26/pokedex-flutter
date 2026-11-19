@@ -78,7 +78,9 @@ flutter build apk --debug
 
 El 15 de noviembre de 2026 se verificaron formato, analisis sin problemas, 69 pruebas aprobadas y APK Android debug correcto. Se comprobaron primera carga online/offline, reinicio sin Internet y fallo del servicio sin perder el catalogo. Las pruebas automatizadas cubren tambien reanudacion, rollback, concurrencia y tres sincronizaciones sin duplicados ni perdida de favoritos.
 
-Para simular el servicio inaccesible con red activa y datos ya guardados:
+Para simular el servicio inaccesible con red activa (PA-08), en una compilacion debug basta con **mantener presionado el indicador de conexion**: aparece "Simulacion: API caida", las peticiones GraphQL van a `https://127.0.0.1:1`, el indicador pasa a Servicio no disponible y la consola muestra cada reintento con su espera (`[sync] ... reintento 1/5 en 2xxx ms`). Otra pulsacion larga la apaga; la app detecta la recuperacion y sincroniza sola. En release el gesto no existe.
+
+Alternativa sin el gesto, recompilando con el endpoint roto:
 
 ```powershell
 flutter build apk --debug --dart-define=POKEAPI_ENDPOINT=https://127.0.0.1:1
