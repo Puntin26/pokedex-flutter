@@ -12,6 +12,22 @@ class PokemonTypeSlot {
   final int slot;
 }
 
+class Generation {
+  const Generation({required this.id, required this.name, this.regionName});
+
+  final int id;
+  final String name;
+  final String? regionName;
+}
+
+class PokemonSpecies {
+  const PokemonSpecies({required this.id, required this.name, this.generation});
+
+  final int id;
+  final String name;
+  final Generation? generation;
+}
+
 class Pokemon {
   Pokemon({
     required this.id,
@@ -20,6 +36,11 @@ class Pokemon {
     this.imageUrl,
     required this.updatedAt,
     required List<PokemonTypeSlot> types,
+    this.species,
+    this.height,
+    this.weight,
+    this.baseStatTotal,
+    this.isDefault = true,
   }) : types = List.unmodifiable(types);
 
   final int id;
@@ -28,4 +49,12 @@ class Pokemon {
   final String? imageUrl;
   final DateTime updatedAt;
   final List<PokemonTypeSlot> types;
+  // Nulos en filas migradas de v1 hasta la siguiente sincronizacion.
+  final PokemonSpecies? species;
+  // Unidades de PokeAPI: decimetros y hectogramos.
+  final int? height;
+  final int? weight;
+  final int? baseStatTotal;
+  // false en formas alternativas (Alola, Galar...).
+  final bool isDefault;
 }

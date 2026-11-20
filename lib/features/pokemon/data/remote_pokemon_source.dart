@@ -21,7 +21,17 @@ class GraphqlPokemonSource implements RemotePokemonSource {
       pokemon(limit: $limit, offset: $offset, order_by: {id: asc}) {
         id
         name
+        height
+        weight
+        is_default
         pokemon_species_id
+        pokemonspecy {
+          id
+          name
+          generation { id name region { name } }
+        }
+        # Solo el total: el servidor suma y no se bajan las 6 stats por Pokemon.
+        pokemonstats_aggregate { aggregate { sum { base_stat } } }
         pokemontypes(order_by: {slot: asc}) {
           slot
           type { id name }
