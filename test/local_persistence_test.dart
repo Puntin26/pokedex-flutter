@@ -74,7 +74,7 @@ void main() {
         final version = await database
             .customSelect('PRAGMA user_version')
             .getSingle();
-        expect(version.read<int>('user_version'), 1);
+        expect(version.read<int>('user_version'), 2);
         final keys = await database
             .customSelect('PRAGMA foreign_keys')
             .getSingle();
@@ -84,7 +84,15 @@ void main() {
             .get();
         expect(
           indices.map((row) => row.read<String>('name')),
-          containsAll(['pokemon_national_order', 'favorite_creation_order']),
+          containsAll([
+            'pokemon_national_order',
+            'favorite_creation_order',
+            // v2: busqueda, filtros y orden del catalogo (RNF-REN-02).
+            'pokemon_name',
+            'pokemon_stat_total_order',
+            'pokemon_type_by_type',
+            'species_generation',
+          ]),
         );
       },
     );
