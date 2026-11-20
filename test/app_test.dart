@@ -15,6 +15,7 @@ import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_page_dto.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_sync_coordinator.dart';
 import 'package:pokedex/features/pokemon/data/remote_pokemon_source.dart';
+import 'package:pokedex/features/pokemon/domain/catalog_query.dart';
 import 'package:pokedex/features/pokemon/domain/pokemon.dart';
 import 'package:pokedex/features/pokemon/presentation/pokemon_catalog_controller.dart';
 import 'package:pokedex/features/pokemon/presentation/pokemon_catalog_state.dart';
@@ -44,10 +45,12 @@ class FailingRepository extends LocalPokemonRepository {
   bool failStatus = false;
 
   @override
-  Stream<List<Pokemon>> watchCatalog() {
+  Stream<List<Pokemon>> watchCatalog([
+    CatalogQuery query = const CatalogQuery(),
+  ]) {
     return failRead
         ? Stream.error(StateError('Fallo de lectura local'))
-        : super.watchCatalog();
+        : super.watchCatalog(query);
   }
 
   @override

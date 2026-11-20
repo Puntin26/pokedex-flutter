@@ -1,9 +1,13 @@
 import '../../../core/domain/sync_metadata.dart';
+import 'catalog_query.dart';
 import 'pokemon.dart';
 
 abstract interface class PokemonRepository {
-  Stream<List<Pokemon>> watchCatalog();
+  Stream<List<Pokemon>> watchCatalog([
+    CatalogQuery query = const CatalogQuery(),
+  ]);
   Stream<List<PokemonType>> watchTypes();
+  Stream<List<Generation>> watchGenerations();
   Stream<SyncMetadata?> watchSyncMetadata(String resourceKey);
   Future<SyncMetadata?> readSyncMetadata(String resourceKey);
 
