@@ -64,6 +64,12 @@ class FailingRepository extends LocalPokemonRepository {
   }
 }
 
+// La lista del catalogo; el buscador tiene su propio Scrollable.
+final catalogList = find.descendant(
+  of: find.byType(ListView),
+  matching: find.byType(Scrollable),
+);
+
 // Deja avanzar SQLite en tiempo real sin esperar una descarga pendiente.
 Future<void> pumpUntil(WidgetTester tester, bool Function() ready) async {
   for (var attempt = 0; attempt < 100; attempt++) {
@@ -222,7 +228,11 @@ void main() {
       expect(container!.read(localCatalogProvider).value, hasLength(30));
       expect(container!.read(catalogMetadataProvider).value!.nextOffset, 30);
       expect(find.text('Actualizando catalogo...'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('pokemon-30'), 400);
+      await tester.scrollUntilVisible(
+        find.text('pokemon-30'),
+        400,
+        scrollable: catalogList,
+      );
       expect(find.text('pokemon-30'), findsOneWidget);
 
       // Esta ruta comprueba el Navigator sin agregar otra pantalla al producto.
@@ -341,9 +351,16 @@ void main() {
       await pumpUntil(
         tester,
         () =>
-            find.text('pokemon-4').evaluate().isNotEmpty &&
+            container!.read(localCatalogProvider).value?.length == 4 &&
             !container!.read(pokemonCatalogStateProvider).isSyncing,
       );
+      // Con la barra de filtros el cuarto queda bajo el borde: se desplaza hasta el.
+      await tester.scrollUntilVisible(
+        find.text('pokemon-4'),
+        200,
+        scrollable: catalogList,
+      );
+      expect(find.text('pokemon-4'), findsOneWidget);
       expect(remote.offsets, [0, 2, 0, 2]);
       expect(tester.takeException(), isNull);
     },

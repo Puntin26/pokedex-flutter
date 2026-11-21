@@ -6,12 +6,16 @@ import '../../../app/pokemon_dependencies.dart';
 import '../../../core/domain/sync_failure.dart';
 import '../../../core/domain/sync_metadata.dart';
 import '../domain/pokemon.dart';
+import 'catalog_query_controller.dart';
 import 'pokemon_catalog_state.dart';
 
 const catalogResourceKey = 'pokemon_catalog';
 
+// Al cambiar la consulta, Riverpod conserva la lista anterior hasta tener la nueva.
 final localCatalogProvider = StreamProvider<List<Pokemon>>(
-  (ref) => ref.watch(pokemonRepositoryProvider).watchCatalog(),
+  (ref) => ref
+      .watch(pokemonRepositoryProvider)
+      .watchCatalog(ref.watch(catalogQueryProvider)),
   retry: (retryCount, error) => null,
 );
 
@@ -85,9 +89,16 @@ final pokemonCatalogStateProvider = Provider<PokemonCatalogState>((ref) {
   final isSyncing =
       sync.isLoading ||
       (!sync.hasError && metadata.value?.status == SyncStatus.syncing);
+  final progress = metadata.value;
+  final hasLocalData =
+      progress != null && (progress.isComplete || progress.nextOffset > 0);
+  final isFiltered = ref.watch(catalogQueryProvider).isFiltered;
   final PokemonCatalogStatus status;
   if (pokemon.isNotEmpty) {
     status = PokemonCatalogStatus.data;
+  } else if (isFiltered && hasLocalData && !catalog.isLoading) {
+    // Hay Pokemon guardados; solo que ninguno coincide.
+    status = PokemonCatalogStatus.noResults;
   } else if (errorMessage != null) {
     status = PokemonCatalogStatus.error;
   } else if (catalog.isLoading || isSyncing) {
@@ -95,10 +106,15 @@ final pokemonCatalogStateProvider = Provider<PokemonCatalogState>((ref) {
   } else {
     status = PokemonCatalogStatus.empty;
   }
+  final total = progress?.totalCount;
+  final partial =
+      progress != null && !progress.isComplete && total != null && total > 0;
   return PokemonCatalogState(
     status: status,
     pokemon: pokemon,
     isSyncing: isSyncing,
     errorMessage: errorMessage,
+    partialDownloaded: partial ? progress.nextOffset : null,
+    partialTotal: partial ? total : null,
   );
 });
