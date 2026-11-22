@@ -52,6 +52,9 @@ class CatalogQueryController extends AsyncNotifier<CatalogQuery> {
   void setGeneration(int? generationId) =>
       _update((query) => query.copyWith(generationId: generationId));
 
+  void setAbility(int? abilityId) =>
+      _update((query) => query.copyWith(abilityId: abilityId));
+
   void setSort(CatalogSort sort) =>
       _update((query) => query.copyWith(sort: sort));
 
@@ -100,4 +103,8 @@ final catalogTypesProvider = StreamProvider<List<PokemonType>>(
 
 final catalogGenerationsProvider = StreamProvider<List<Generation>>(
   (ref) => ref.watch(pokemonRepositoryProvider).watchGenerations(),
+);
+
+final catalogAbilitiesProvider = StreamProvider<List<Ability>>(
+  (ref) => ref.watch(pokemonRepositoryProvider).watchAbilities(),
 );

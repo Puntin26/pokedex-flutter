@@ -8,6 +8,7 @@ import 'catalog_query_controller.dart';
 const catalogSearchFieldKey = Key('catalog-search');
 const catalogTypeMenuKey = Key('catalog-type-menu');
 const catalogGenerationMenuKey = Key('catalog-generation-menu');
+const catalogAbilityFieldKey = Key('catalog-ability-field');
 const catalogSortMenuKey = Key('catalog-sort-menu');
 const catalogDirectionButtonKey = Key('catalog-direction');
 
@@ -53,6 +54,7 @@ class _CatalogFilterBarState extends ConsumerState<CatalogFilterBar> {
     final controller = ref.read(catalogQueryProvider.notifier);
     final types = ref.watch(catalogTypesProvider).value ?? const [];
     final generations = ref.watch(catalogGenerationsProvider).value ?? const [];
+    final abilities = ref.watch(catalogAbilitiesProvider).value ?? const [];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
@@ -114,6 +116,12 @@ class _CatalogFilterBarState extends ConsumerState<CatalogFilterBar> {
                       for (final generation in generations)
                         (generation.id, generationLabel(generation)),
                     ],
+                  ),
+                  _AbilityFilter(
+                    width: menuWidth,
+                    abilities: abilities,
+                    selectedId: query.abilityId,
+                    onChanged: controller.setAbility,
                   ),
                   _Menu<CatalogSort>(
                     key: catalogSortMenuKey,
@@ -197,6 +205,72 @@ class _Menu<T> extends StatelessWidget {
     );
   }
 }
+
+/// Filtro por habilidad (RF-FIL-02): ~300 opciones no caben en un menu, asi que
+/// se escribe y se elige; elegida, queda como chip que se puede quitar.
+class _AbilityFilter extends StatelessWidget {
+  const _AbilityFilter({
+    required this.width,
+    required this.abilities,
+    required this.selectedId,
+    required this.onChanged,
+  });
+
+  final double width;
+  final List<Ability> abilities;
+  final int? selectedId;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final id = selectedId;
+    if (id != null) {
+      final selected = abilities.where((ability) => ability.id == id);
+      final name = selected.isEmpty
+          ? 'seleccionada'
+          : abilityLabel(selected.first);
+      return ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: width),
+        child: InputChip(
+          label: Text('Habilidad: $name', overflow: TextOverflow.ellipsis),
+          onDeleted: () => onChanged(null),
+          deleteButtonTooltipMessage: 'Quitar filtro de habilidad',
+        ),
+      );
+    }
+    return SizedBox(
+      width: width,
+      child: Autocomplete<Ability>(
+        displayStringForOption: abilityLabel,
+        optionsBuilder: (value) {
+          final term = value.text.trim().toLowerCase().replaceAll(
+            RegExp(r'\s+'),
+            '-',
+          );
+          if (term.isEmpty) return const Iterable<Ability>.empty();
+          return abilities.where((ability) => ability.name.contains(term));
+        },
+        onSelected: (ability) => onChanged(ability.id),
+        fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
+            TextField(
+              key: catalogAbilityFieldKey,
+              controller: controller,
+              focusNode: focusNode,
+              decoration: const InputDecoration(
+                labelText: 'Habilidad',
+                prefixIcon: Icon(Icons.auto_awesome),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+      ),
+    );
+  }
+}
+
+/// "thick-fat" -> "Thick fat".
+String abilityLabel(Ability ability) =>
+    _capitalize(ability.name.replaceAll('-', ' '));
 
 /// "grass" -> "Grass". Las traducciones llegan con i18n (Fase 6).
 String typeLabel(PokemonType type) => _capitalize(type.name);

@@ -8,6 +8,7 @@ import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_page_dto.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_sync_coordinator.dart';
 import 'package:pokedex/features/pokemon/data/remote_pokemon_source.dart';
+import 'package:pokedex/features/pokemon/domain/catalog_query.dart';
 
 // Comprobacion manual: no forma parte de la suite automatizada sin Internet.
 void main() {
@@ -60,6 +61,14 @@ void main() {
     expect(catalog.first.species!.id, 1);
     expect(catalog.first.species!.generation!.id, 1);
     expect(catalog.first.species!.generation!.regionName, 'kanto');
+    // 2.9: habilidades reales; los 4 primeros: 3 con overgrow, charmander no.
+    final abilities = await local.watchAbilities().first;
+    final overgrow = abilities.firstWhere((item) => item.name == 'overgrow');
+    expect(abilities.map((item) => item.name), contains('chlorophyll'));
+    final withOvergrow = await local
+        .watchCatalog(CatalogQuery(abilityId: overgrow.id))
+        .first;
+    expect(withOvergrow.map((item) => item.id), [1, 2, 3]);
     await favorites.addFavorite(catalog.first.id, DateTime.utc(2026));
     final metadata = (await local.readSyncMetadata(resource))!;
     await local.savePage(firstPage!.toDomain(DateTime.now().toUtc()), metadata);

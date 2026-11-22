@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokedex/core/database/app_database.dart';
@@ -19,6 +20,11 @@ const normal = PokemonType(id: 1, name: 'normal');
 const gen1 = Generation(id: 1, name: 'generation-i', regionName: 'kanto');
 const gen2 = Generation(id: 2, name: 'generation-ii', regionName: 'johto');
 
+const overgrow = Ability(id: 65, name: 'overgrow');
+const chlorophyll = Ability(id: 34, name: 'chlorophyll');
+const blaze = Ability(id: 66, name: 'blaze');
+const staticAbility = Ability(id: 9, name: 'static');
+
 Pokemon entry(
   int id,
   String name, {
@@ -27,6 +33,7 @@ Pokemon entry(
   Generation? generation,
   int? total,
   bool hasSpecies = true,
+  List<Ability> abilities = const [],
 }) {
   final number = nationalNumber ?? id;
   return Pokemon(
@@ -42,15 +49,47 @@ Pokemon entry(
         ? PokemonSpecies(id: number, name: name, generation: generation)
         : null,
     baseStatTotal: total,
+    abilities: [
+      for (var i = 0; i < abilities.length; i++)
+        PokemonAbility(ability: abilities[i], slot: i + 1, isHidden: i == 1),
+    ],
   );
 }
 
 final catalog = [
-  entry(1, 'bulbasaur', types: [grass, poison], generation: gen1, total: 318),
-  entry(4, 'charmander', types: [fire], generation: gen1, total: 309),
-  entry(25, 'pikachu', types: [electric], generation: gen1, total: 320),
+  entry(
+    1,
+    'bulbasaur',
+    types: [grass, poison],
+    generation: gen1,
+    total: 318,
+    abilities: [overgrow, chlorophyll],
+  ),
+  entry(
+    4,
+    'charmander',
+    types: [fire],
+    generation: gen1,
+    total: 309,
+    abilities: [blaze],
+  ),
+  entry(
+    25,
+    'pikachu',
+    types: [electric],
+    generation: gen1,
+    total: 320,
+    abilities: [staticAbility],
+  ),
   entry(122, 'mr-mime', types: [psychic, fairy], generation: gen1, total: 460),
-  entry(152, 'chikorita', types: [grass], generation: gen2, total: 318),
+  entry(
+    152,
+    'chikorita',
+    types: [grass],
+    generation: gen2,
+    total: 318,
+    abilities: [overgrow],
+  ),
   entry(
     10091,
     'rattata-alola',
@@ -253,6 +292,72 @@ void main() {
       final generations = await repository.watchGenerations().first;
       expect(generations.map((generation) => generation.id), [1, 2]);
       expect(generations.last.regionName, 'johto');
+    });
+  });
+
+  group('Filtro por habilidad (2.9, RF-FIL-02)', () {
+    test('Filtra por habilidad y conserva tipos', () async {
+      final result = await repository
+          .watchCatalog(CatalogQuery(abilityId: overgrow.id))
+          .first;
+      expect(result.map((pokemon) => pokemon.name), ['bulbasaur', 'chikorita']);
+      expect(result.first.types, hasLength(2));
+      expect(
+        await names(CatalogQuery(abilityId: overgrow.id, generationId: 2)),
+        ['chikorita'],
+      );
+      expect(await names(CatalogQuery(abilityId: chlorophyll.id)), [
+        'bulbasaur',
+      ]);
+    });
+
+    test(
+      'watchAbilities lista las habilidades por nombre sin repetir',
+      () async {
+        final abilities = await repository.watchAbilities().first;
+        expect(abilities.map((ability) => ability.name), [
+          'blaze',
+          'chlorophyll',
+          'overgrow',
+          'static',
+        ]);
+      },
+    );
+
+    test('La sync restaura enlaces alterados y no pisa el efecto', () async {
+      await (database.delete(
+        database.pokemonAbilities,
+      )..where((row) => row.pokemonId.equals(1))).go();
+      await (database.update(database.abilities)
+            ..where((row) => row.id.equals(overgrow.id)))
+          .write(const AbilitiesCompanion(effectSummary: Value('Potencia.')));
+
+      await repository.savePage(
+        [catalog.first],
+        SyncMetadata(
+          resourceKey: 'pokemon_catalog',
+          nextOffset: catalog.length,
+          totalCount: catalog.length,
+          status: SyncStatus.success,
+          isComplete: true,
+        ),
+      );
+
+      expect(await names(CatalogQuery(abilityId: chlorophyll.id)), [
+        'bulbasaur',
+      ]);
+      final row = await (database.select(
+        database.abilities,
+      )..where((ability) => ability.id.equals(overgrow.id))).getSingle();
+      expect(row.effectSummary, 'Potencia.');
+    });
+
+    test('CatalogQuery guarda, limpia y cuenta el filtro de habilidad', () {
+      const query = CatalogQuery(abilityId: 65);
+      expect(query.isFiltered, isTrue);
+      expect(CatalogQuery.decode(query.encode()), query);
+      expect(query.copyWith(abilityId: null), const CatalogQuery());
+      expect(CatalogQuery.decode('{"abilityId": 0}'), const CatalogQuery());
     });
   });
 }

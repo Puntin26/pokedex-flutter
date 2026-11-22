@@ -12,6 +12,25 @@ class PokemonTypeSlot {
   final int slot;
 }
 
+class Ability {
+  const Ability({required this.id, required this.name});
+
+  final int id;
+  final String name;
+}
+
+class PokemonAbility {
+  const PokemonAbility({
+    required this.ability,
+    required this.slot,
+    required this.isHidden,
+  });
+
+  final Ability ability;
+  final int slot;
+  final bool isHidden;
+}
+
 class Generation {
   const Generation({required this.id, required this.name, this.regionName});
 
@@ -41,7 +60,9 @@ class Pokemon {
     this.weight,
     this.baseStatTotal,
     this.isDefault = true,
-  }) : types = List.unmodifiable(types);
+    List<PokemonAbility> abilities = const [],
+  }) : types = List.unmodifiable(types),
+       abilities = List.unmodifiable(abilities);
 
   final int id;
   final int nationalNumber;
@@ -57,4 +78,7 @@ class Pokemon {
   final int? baseStatTotal;
   // false en formas alternativas (Alola, Galar...).
   final bool isDefault;
+  // Se llena al descargar y se guarda para el filtro (RF-FIL-02); la lista del
+  // catalogo no lo lee para no multiplicar filas del join (lo leera el detalle).
+  final List<PokemonAbility> abilities;
 }

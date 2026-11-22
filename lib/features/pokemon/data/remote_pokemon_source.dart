@@ -32,6 +32,11 @@ class GraphqlPokemonSource implements RemotePokemonSource {
         }
         # Solo el total: el servidor suma y no se bajan las 6 stats por Pokemon.
         pokemonstats_aggregate { aggregate { sum { base_stat } } }
+        pokemonabilities(order_by: {slot: asc}) {
+          slot
+          is_hidden
+          ability { id name }
+        }
         pokemontypes(order_by: {slot: asc}) {
           slot
           type { id name }

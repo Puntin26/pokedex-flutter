@@ -8,6 +8,7 @@ abstract interface class PokemonRepository {
   ]);
   Stream<List<PokemonType>> watchTypes();
   Stream<List<Generation>> watchGenerations();
+  Stream<List<Ability>> watchAbilities();
   Stream<SyncMetadata?> watchSyncMetadata(String resourceKey);
   Future<SyncMetadata?> readSyncMetadata(String resourceKey);
 

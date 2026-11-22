@@ -5,6 +5,7 @@ Map<String, dynamic> catalogRow(
   String? name,
   bool isDefault = true,
   int baseStatTotal = 318,
+  List<Map<String, dynamic>>? abilities,
 }) {
   final speciesId = nationalNumber ?? id;
   return {
@@ -29,6 +30,12 @@ Map<String, dynamic> catalogRow(
         'sum': <String, dynamic>{'base_stat': baseStatTotal},
       },
     },
+    'pokemonabilities':
+        abilities ??
+        [
+          abilityRow(65, 'overgrow', slot: 1),
+          abilityRow(34, 'chlorophyll', slot: 3, hidden: true),
+        ],
     'pokemontypes': [
       {
         'slot': 1,
@@ -56,4 +63,15 @@ Map<String, dynamic> catalogResponse(
   'pokemon_aggregate': {
     'aggregate': {'count': total},
   },
+};
+
+Map<String, dynamic> abilityRow(
+  int id,
+  String name, {
+  required int slot,
+  bool hidden = false,
+}) => <String, dynamic>{
+  'slot': slot,
+  'is_hidden': hidden,
+  'ability': <String, dynamic>{'id': id, 'name': name},
 };

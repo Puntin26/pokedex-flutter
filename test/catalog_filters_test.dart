@@ -37,12 +37,17 @@ const electric = PokemonType(id: 13, name: 'electric');
 const gen1 = Generation(id: 1, name: 'generation-i', regionName: 'kanto');
 const gen2 = Generation(id: 2, name: 'generation-ii', regionName: 'johto');
 
+const overgrow = Ability(id: 65, name: 'overgrow');
+const blaze = Ability(id: 66, name: 'blaze');
+const staticAbility = Ability(id: 9, name: 'static');
+
 Pokemon entry(
   int id,
   String name,
   PokemonType type,
   Generation generation,
   int total,
+  Ability ability,
 ) => Pokemon(
   id: id,
   nationalNumber: id,
@@ -51,13 +56,14 @@ Pokemon entry(
   types: [PokemonTypeSlot(type: type, slot: 1)],
   species: PokemonSpecies(id: id, name: name, generation: generation),
   baseStatTotal: total,
+  abilities: [PokemonAbility(ability: ability, slot: 1, isHidden: false)],
 );
 
 final sample = [
-  entry(1, 'bulbasaur', grass, gen1, 318),
-  entry(4, 'charmander', fire, gen1, 309),
-  entry(25, 'pikachu', electric, gen1, 320),
-  entry(152, 'chikorita', grass, gen2, 318),
+  entry(1, 'bulbasaur', grass, gen1, 318, overgrow),
+  entry(4, 'charmander', fire, gen1, 309, blaze),
+  entry(25, 'pikachu', electric, gen1, 320, staticAbility),
+  entry(152, 'chikorita', grass, gen2, 318, overgrow),
 ];
 
 void main() {
@@ -382,6 +388,31 @@ void main() {
         () => LocalSettingsRepository(database).read(catalogQuerySettingKey),
       );
       expect(CatalogQuery.decode(saved), CatalogQuery(typeId: fire.id));
+    });
+
+    testWidgets('Filtra por habilidad con autocompletado y chip (2.9)', (
+      tester,
+    ) async {
+      await seed(tester);
+      await mount(tester);
+
+      await tester.enterText(find.byKey(catalogAbilityFieldKey), 'over');
+      await tester.pump();
+      await tester.tap(find.text('Overgrow').last);
+      await tester.pump();
+      await settle(tester);
+      expect(visibleNames(tester), ['bulbasaur', 'chikorita']);
+      expect(find.text('Habilidad: Overgrow'), findsOneWidget);
+      final saved = await tester.runAsync(
+        () => LocalSettingsRepository(database).read(catalogQuerySettingKey),
+      );
+      expect(CatalogQuery.decode(saved).abilityId, overgrow.id);
+
+      await tester.tap(find.byTooltip('Quitar filtro de habilidad'));
+      await tester.pump();
+      await settle(tester);
+      expect(visibleNames(tester), hasLength(4));
+      expect(find.byKey(catalogAbilityFieldKey), findsOneWidget);
     });
   });
 }
