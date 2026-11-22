@@ -12,12 +12,12 @@ import 'pokemon_catalog_state.dart';
 const catalogResourceKey = 'pokemon_catalog';
 
 // Al cambiar la consulta, Riverpod conserva la lista anterior hasta tener la nueva.
-final localCatalogProvider = StreamProvider<List<Pokemon>>(
-  (ref) => ref
-      .watch(pokemonRepositoryProvider)
-      .watchCatalog(ref.watch(catalogQueryProvider)),
-  retry: (retryCount, error) => null,
-);
+// Espera la consulta restaurada para no mostrar primero el catalogo sin filtrar.
+final localCatalogProvider = StreamProvider<List<Pokemon>>((ref) async* {
+  final repository = ref.watch(pokemonRepositoryProvider);
+  final query = await ref.watch(catalogQueryProvider.future);
+  yield* repository.watchCatalog(query);
+}, retry: (retryCount, error) => null);
 
 final catalogMetadataProvider = StreamProvider<SyncMetadata?>(
   (ref) => ref
@@ -92,7 +92,7 @@ final pokemonCatalogStateProvider = Provider<PokemonCatalogState>((ref) {
   final progress = metadata.value;
   final hasLocalData =
       progress != null && (progress.isComplete || progress.nextOffset > 0);
-  final isFiltered = ref.watch(catalogQueryProvider).isFiltered;
+  final isFiltered = ref.watch(catalogQueryProvider).value?.isFiltered ?? false;
   final PokemonCatalogStatus status;
   if (pokemon.isNotEmpty) {
     status = PokemonCatalogStatus.data;

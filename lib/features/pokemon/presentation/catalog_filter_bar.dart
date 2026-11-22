@@ -25,8 +25,10 @@ class _CatalogFilterBarState extends ConsumerState<CatalogFilterBar> {
   @override
   void initState() {
     super.initState();
-    _search = TextEditingController(text: ref.read(catalogQueryProvider).search)
-      ..addListener(() => setState(() {}));
+    // La pagina solo crea esta barra cuando la consulta ya se restauro.
+    _search = TextEditingController(
+      text: ref.read(catalogQueryProvider).requireValue.search,
+    )..addListener(() => setState(() {}));
   }
 
   @override
@@ -39,13 +41,15 @@ class _CatalogFilterBarState extends ConsumerState<CatalogFilterBar> {
   Widget build(BuildContext context) {
     // "Limpiar filtros" se pulsa fuera de este widget: vacia tambien el campo.
     ref.listen(catalogQueryProvider, (previous, next) {
-      if (next.search.isEmpty &&
-          (previous?.search.isNotEmpty ?? false) &&
+      final search = next.value?.search;
+      if (search != null &&
+          search.isEmpty &&
+          (previous?.value?.search.isNotEmpty ?? false) &&
           _search.text.isNotEmpty) {
         _search.clear();
       }
     });
-    final query = ref.watch(catalogQueryProvider);
+    final query = ref.watch(catalogQueryProvider).requireValue;
     final controller = ref.read(catalogQueryProvider.notifier);
     final types = ref.watch(catalogTypesProvider).value ?? const [];
     final generations = ref.watch(catalogGenerationsProvider).value ?? const [];

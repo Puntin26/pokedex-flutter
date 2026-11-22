@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 enum CatalogSort { number, name, baseStatTotal }
 
 const _keep = Object();
@@ -42,6 +44,38 @@ class CatalogQuery {
     sort: sort ?? this.sort,
     descending: descending ?? this.descending,
   );
+
+  /// JSON para guardarla entre sesiones (RF-FIL-04).
+  String encode() => jsonEncode({
+    'search': search,
+    'typeId': typeId,
+    'generationId': generationId,
+    'sort': sort.name,
+    'descending': descending,
+  });
+
+  /// Tolerante: un valor guardado corrupto o de otra version no rompe el
+  /// arranque; cada campo invalido vuelve a su valor por defecto.
+  static CatalogQuery decode(String? raw) {
+    if (raw == null || raw.isEmpty) return const CatalogQuery();
+    final Object? data;
+    try {
+      data = jsonDecode(raw);
+    } on FormatException {
+      return const CatalogQuery();
+    }
+    if (data is! Map<String, dynamic>) return const CatalogQuery();
+    int? positiveId(Object? value) => value is int && value > 0 ? value : null;
+    final search = data['search'];
+    final descending = data['descending'];
+    return CatalogQuery(
+      search: search is String ? search : '',
+      typeId: positiveId(data['typeId']),
+      generationId: positiveId(data['generationId']),
+      sort: CatalogSort.values.asNameMap()[data['sort']] ?? CatalogSort.number,
+      descending: descending is bool && descending,
+    );
+  }
 
   @override
   bool operator ==(Object other) =>

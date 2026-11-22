@@ -7,8 +7,10 @@ import 'package:material_ui/material_ui.dart';
 import 'package:pokedex/app/app.dart';
 import 'package:pokedex/app/connection_status_provider.dart';
 import 'package:pokedex/app/pokemon_dependencies.dart';
+import 'package:pokedex/app/settings_provider.dart';
 import 'package:pokedex/core/connectivity/connection_monitor.dart';
 import 'package:pokedex/core/database/app_database.dart';
+import 'package:pokedex/core/database/local_settings_repository.dart';
 import 'package:pokedex/core/domain/sync_activity.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
@@ -17,6 +19,8 @@ import 'package:pokedex/features/pokemon/domain/pokemon.dart';
 import 'package:pokedex/features/pokemon/domain/pokemon_sync.dart';
 import 'package:pokedex/features/pokemon/presentation/catalog_filter_bar.dart';
 import 'package:pokedex/features/pokemon/presentation/catalog_query_controller.dart';
+
+import 'support/fake_settings.dart';
 
 class IdleSync implements PokemonSync {
   @override
@@ -59,15 +63,25 @@ final sample = [
 void main() {
   // Debounce del buscador con tiempo falso (RF-CAT-03).
   group('CatalogQueryController', () {
+    Future<ProviderContainer> ready() async {
+      final container = ProviderContainer(
+        overrides: [
+          settingsRepositoryProvider.overrideWithValue(FakeSettings()),
+        ],
+      );
+      addTearDown(container.dispose);
+      await container.read(catalogQueryProvider.future);
+      return container;
+    }
+
     testWidgets('Aplica la busqueda 400 ms despues de la ultima tecla', (
       tester,
     ) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+      final container = await ready();
       final changes = <String>[];
       container.listen(
         catalogQueryProvider,
-        (_, next) => changes.add(next.search),
+        (_, next) => changes.add(next.requireValue.search),
       );
       final controller = container.read(catalogQueryProvider.notifier);
 
@@ -86,15 +100,14 @@ void main() {
     testWidgets('Tipo, generacion y orden se aplican al instante', (
       tester,
     ) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+      final container = await ready();
       final controller = container.read(catalogQueryProvider.notifier);
       controller.setType(12);
       controller.setGeneration(2);
       controller.setSort(CatalogSort.name);
       controller.toggleDescending();
       expect(
-        container.read(catalogQueryProvider),
+        container.read(catalogQueryProvider).requireValue,
         const CatalogQuery(
           typeId: 12,
           generationId: 2,
@@ -107,8 +120,7 @@ void main() {
     testWidgets('clear quita busqueda y filtros pero conserva el orden', (
       tester,
     ) async {
-      final container = ProviderContainer();
-      addTearDown(container.dispose);
+      final container = await ready();
       final controller = container.read(catalogQueryProvider.notifier);
       controller.setType(12);
       controller.setSort(CatalogSort.baseStatTotal);
@@ -116,7 +128,7 @@ void main() {
       controller.clearFilters();
       await tester.pump(const Duration(seconds: 1));
       expect(
-        container.read(catalogQueryProvider),
+        container.read(catalogQueryProvider).requireValue,
         const CatalogQuery(sort: CatalogSort.baseStatTotal),
       );
     });
@@ -324,6 +336,52 @@ void main() {
       await mount(tester, textScale: 2, width: 360);
       expect(tester.takeException(), isNull);
       expect(find.byKey(catalogSearchFieldKey), findsOneWidget);
+    });
+
+    testWidgets('Al abrir la app restaura busqueda, filtros y orden', (
+      tester,
+    ) async {
+      await seed(tester);
+      await tester.runAsync(
+        () => LocalSettingsRepository(database).write(
+          catalogQuerySettingKey,
+          const CatalogQuery(
+            search: 'i',
+            typeId: 12,
+            sort: CatalogSort.name,
+            descending: true,
+          ).encode(),
+        ),
+      );
+      await mount(tester);
+
+      // Ya filtrado desde el primer cuadro: grass con "i", nombre descendente.
+      expect(visibleNames(tester), ['chikorita']);
+      expect(
+        tester
+            .widget<TextField>(find.byKey(catalogSearchFieldKey))
+            .controller!
+            .text,
+        'i',
+      );
+      expect(find.text('Grass'), findsOneWidget);
+      expect(find.text('Nombre'), findsOneWidget);
+      expect(
+        find.bySemanticsLabel(RegExp('Orden descendente')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Cambiar un filtro en pantalla queda guardado en app_setting', (
+      tester,
+    ) async {
+      await seed(tester);
+      await mount(tester);
+      await choose(tester, catalogTypeMenuKey, 'Fire');
+      final saved = await tester.runAsync(
+        () => LocalSettingsRepository(database).read(catalogQuerySettingKey),
+      );
+      expect(CatalogQuery.decode(saved), CatalogQuery(typeId: fire.id));
     });
   });
 }
