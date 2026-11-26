@@ -29,6 +29,96 @@ void main() {
     expect(result.updatedAt.isUtc, isTrue);
   });
 
+  test('Mapea especie, generacion, region, medidas y total de stats (2.3)', () {
+    final row = catalogRow(
+      10091,
+      nationalNumber: 19,
+      name: 'rattata-alola',
+      isDefault: false,
+      baseStatTotal: 253,
+    );
+    final result = PokemonPageDto.fromJson(
+      catalogResponse([row], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single;
+    expect(result.isDefault, isFalse);
+    expect(result.height, 7);
+    expect(result.weight, 69);
+    expect(result.baseStatTotal, 253);
+    expect(result.species!.id, 19);
+    expect(result.species!.name, 'species-19');
+    expect(result.species!.generation!.id, 1);
+    expect(result.species!.generation!.name, 'generation-i');
+    expect(result.species!.generation!.regionName, 'kanto');
+  });
+
+  test('Mapea habilidades por slot con la marca de oculta (2.9)', () {
+    final row = catalogRow(
+      10091,
+      nationalNumber: 19,
+      abilities: [
+        abilityRow(47, 'thick-fat', slot: 3, hidden: true),
+        abilityRow(82, 'gluttony', slot: 1),
+        abilityRow(55, 'hustle', slot: 2),
+      ],
+    );
+    final result = PokemonPageDto.fromJson(
+      catalogResponse([row], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single;
+    expect(result.abilities.map((entry) => entry.slot), [1, 2, 3]);
+    expect(result.abilities.map((entry) => entry.ability.name), [
+      'gluttony',
+      'hustle',
+      'thick-fat',
+    ]);
+    expect(result.abilities.map((entry) => entry.isHidden), [
+      false,
+      false,
+      true,
+    ]);
+  });
+
+  test('Acepta Pokemon sin habilidades (9 casos reales en PokeAPI)', () {
+    final row = catalogRow(1, abilities: []);
+    final result = PokemonPageDto.fromJson(
+      catalogResponse([row], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single;
+    expect(result.abilities, isEmpty);
+  });
+
+  test('Acepta nulos donde el esquema los permite', () {
+    final row = catalogRow(1)
+      ..['height'] = null
+      ..['weight'] = null;
+    (row['pokemonspecy'] as Map)['generation'] = null;
+    ((row['pokemonstats_aggregate'] as Map)['aggregate'] as Map)['sum'] = {
+      'base_stat': null,
+    };
+    final result = PokemonPageDto.fromJson(
+      catalogResponse([row], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single;
+    expect(result.height, isNull);
+    expect(result.weight, isNull);
+    expect(result.baseStatTotal, isNull);
+    expect(result.species!.generation, isNull);
+
+    final noRegion = catalogRow(2);
+    ((noRegion['pokemonspecy'] as Map)['generation'] as Map)['region'] = null;
+    final generation = PokemonPageDto.fromJson(
+      catalogResponse([noRegion], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single.species!.generation!;
+    expect(generation.regionName, isNull);
+  });
+
   test('Usa sprite si falta artwork y admite ausencia real de imagen', () {
     for (final sprites in [
       [
@@ -72,6 +162,36 @@ void main() {
         (row['pokemonsprites'] as List).first.remove('artwork'),
     'imagen invalida': (row) =>
         (row['pokemonsprites'] as List).first['front'] = 'invalid',
+    'especie ausente': (row) => row.remove('pokemonspecy'),
+    'especie distinta al numero': (row) =>
+        (row['pokemonspecy'] as Map)['id'] = 99,
+    'especie sin nombre': (row) => (row['pokemonspecy'] as Map)['name'] = '',
+    'generacion parcial': (row) =>
+        ((row['pokemonspecy'] as Map)['generation'] as Map).remove('name'),
+    'is_default no booleano': (row) => row['is_default'] = 1,
+    'altura negativa': (row) => row['height'] = -1,
+    'peso no entero': (row) => row['weight'] = 6.9,
+    'stats sin agregado': (row) => row.remove('pokemonstats_aggregate'),
+    'habilidades ausentes': (row) => row.remove('pokemonabilities'),
+    'slot de habilidad fuera de rango': (row) =>
+        (row['pokemonabilities'] as List).first['slot'] = 4,
+    'slot de habilidad repetido': (row) =>
+        (row['pokemonabilities'] as List).last['slot'] = 1,
+    'habilidad repetida': (row) =>
+        (row['pokemonabilities'] as List).last['ability'] = {
+          'id': 65,
+          'name': 'overgrow',
+        },
+    'is_hidden no booleano': (row) =>
+        (row['pokemonabilities'] as List).first['is_hidden'] = null,
+    'habilidad sin nombre': (row) =>
+        ((row['pokemonabilities'] as List).first['ability'] as Map).remove(
+          'name',
+        ),
+    'total negativo': (row) =>
+        ((row['pokemonstats_aggregate'] as Map)['aggregate'] as Map)['sum'] = {
+          'base_stat': -5,
+        },
   };
   for (final entry in invalidRows.entries) {
     test('Rechaza ${entry.key}', () {

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,6 +16,8 @@ const grass = PokemonType(id: 12, name: 'grass');
 const poison = PokemonType(id: 4, name: 'poison');
 const resource = 'pokemon_catalog';
 
+const kanto = Generation(id: 1, name: 'generation-i', regionName: 'kanto');
+
 Pokemon samplePokemon({
   int id = 1,
   int nationalNumber = 1,
@@ -24,6 +27,9 @@ Pokemon samplePokemon({
     PokemonTypeSlot(type: poison, slot: 2),
     PokemonTypeSlot(type: grass, slot: 1),
   ],
+  PokemonSpecies? species,
+  int? baseStatTotal,
+  bool isDefault = true,
 }) => Pokemon(
   id: id,
   nationalNumber: nationalNumber,
@@ -31,6 +37,9 @@ Pokemon samplePokemon({
   imageUrl: imageUrl,
   updatedAt: savedAt,
   types: types,
+  species: species,
+  baseStatTotal: baseStatTotal,
+  isDefault: isDefault,
 );
 
 SyncMetadata pageMetadata({int offset = 1, bool complete = false}) =>
@@ -74,7 +83,7 @@ void main() {
         final version = await database
             .customSelect('PRAGMA user_version')
             .getSingle();
-        expect(version.read<int>('user_version'), 1);
+        expect(version.read<int>('user_version'), 2);
         final keys = await database
             .customSelect('PRAGMA foreign_keys')
             .getSingle();
@@ -84,7 +93,15 @@ void main() {
             .get();
         expect(
           indices.map((row) => row.read<String>('name')),
-          containsAll(['pokemon_national_order', 'favorite_creation_order']),
+          containsAll([
+            'pokemon_national_order',
+            'favorite_creation_order',
+            // v2: busqueda, filtros y orden del catalogo (RNF-REN-02).
+            'pokemon_name',
+            'pokemon_stat_total_order',
+            'pokemon_type_by_type',
+            'species_generation',
+          ]),
         );
       },
     );
@@ -488,4 +505,80 @@ void main() {
       }
     },
   );
+
+  group('Catalogo v2: especie, generacion y medidas (2.3)', () {
+    late AppDatabase database;
+    late LocalPokemonRepository pokemon;
+
+    setUp(() {
+      database = AppDatabase(NativeDatabase.memory());
+      pokemon = LocalPokemonRepository(database);
+    });
+    tearDown(() => database.close());
+
+    test('Guarda y devuelve especie, generacion, total y forma', () async {
+      await pokemon.savePage([
+        samplePokemon(
+          species: const PokemonSpecies(
+            id: 1,
+            name: 'bulbasaur',
+            generation: kanto,
+          ),
+          baseStatTotal: 318,
+        ),
+        samplePokemon(
+          id: 10091,
+          nationalNumber: 19,
+          name: 'rattata-alola',
+          species: const PokemonSpecies(
+            id: 19,
+            name: 'rattata',
+            generation: kanto,
+          ),
+          baseStatTotal: 253,
+          isDefault: false,
+        ),
+      ], pageMetadata(offset: 2, complete: true));
+
+      final catalog = await pokemon.watchCatalog().first;
+      expect(catalog.map((item) => item.id), [1, 10091]);
+      final alola = catalog.last;
+      expect(alola.isDefault, isFalse);
+      expect(alola.baseStatTotal, 253);
+      expect(alola.species!.id, 19);
+      expect(alola.species!.name, 'rattata');
+      expect(alola.species!.generation!.regionName, 'kanto');
+      expect(await database.select(database.generations).get(), hasLength(1));
+      expect(
+        await database.select(database.pokemonSpecies).get(),
+        hasLength(2),
+      );
+    });
+
+    test('El catalogo no borra lo que guardo la sync del detalle', () async {
+      const species = PokemonSpecies(
+        id: 1,
+        name: 'bulbasaur',
+        generation: kanto,
+      );
+      await pokemon.savePage([samplePokemon(species: species)], pageMetadata());
+      // Simula la sync del detalle (Fase 4) completando campos propios.
+      await (database.update(database.pokemonSpecies)
+            ..where((row) => row.id.equals(1)))
+          .write(const PokemonSpeciesCompanion(evolutionChainId: Value(1)));
+
+      await pokemon.savePage([samplePokemon(species: species)], pageMetadata());
+
+      final row = await database.select(database.pokemonSpecies).getSingle();
+      expect(row.evolutionChainId, 1);
+    });
+
+    test('Sin especie (fila migrada de v1) se lee con campos nulos', () async {
+      await pokemon.savePage([samplePokemon()], pageMetadata());
+      final item = (await pokemon.watchCatalog().first).single;
+      expect(item.species, isNull);
+      expect(item.baseStatTotal, isNull);
+      expect(item.isDefault, isTrue);
+    });
+  });
 }
