@@ -7,10 +7,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/connectivity/connection_monitor.dart';
 import '../core/network/pokeapi_graphql_client.dart';
 import '../core/network/pokeapi_service_probe.dart';
+import 'api_outage_simulation.dart';
 
 final connectionMonitorProvider = Provider<ConnectionMonitor>((ref) {
   final connectivity = Connectivity();
-  final client = createPokeApiClient(timeout: const Duration(seconds: 5));
+  final client = createPokeApiClient(
+    timeout: const Duration(seconds: 5),
+    simulateOutage: () => ref.read(apiOutageSimulationProvider),
+  );
   ref.onDispose(client.link.dispose);
   final probe = PokeApiServiceProbe(client);
   bool hasNetwork(List<ConnectivityResult> results) =>

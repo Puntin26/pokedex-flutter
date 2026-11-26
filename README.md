@@ -78,7 +78,9 @@ flutter build apk --debug
 
 El 15 de noviembre de 2026 se verificaron formato, analisis sin problemas, 69 pruebas aprobadas y APK Android debug correcto. Se comprobaron primera carga online/offline, reinicio sin Internet y fallo del servicio sin perder el catalogo. Las pruebas automatizadas cubren tambien reanudacion, rollback, concurrencia y tres sincronizaciones sin duplicados ni perdida de favoritos.
 
-Para simular el servicio inaccesible con red activa y datos ya guardados:
+Para simular el servicio inaccesible con red activa (PA-08), en una compilacion debug basta con **mantener presionado el indicador de conexion**: aparece "Simulacion: API caida", las peticiones GraphQL van a `https://127.0.0.1:1`, el indicador pasa a Servicio no disponible y la consola muestra cada reintento con su espera (`[sync] ... reintento 1/5 en 2xxx ms`). Otra pulsacion larga la apaga; la app detecta la recuperacion y sincroniza sola. En release el gesto no existe.
+
+Alternativa sin el gesto, recompilando con el endpoint roto:
 
 ```powershell
 flutter build apk --debug --dart-define=POKEAPI_ENDPOINT=https://127.0.0.1:1
@@ -89,9 +91,9 @@ Cerrar y abrir la app: debe conservar el catalogo y mostrar Servicio no disponib
 
 ## Limites y documentacion
 
-Quedan pendientes detalle, pantalla de favoritos, busqueda, filtros y trivia. Favoritos ya tiene persistencia y repositorio probados. Tambien faltan cache de imagenes en disco, politica de vigencia, reintentos con backoff y sincronizacion al reconectar. El indicador aun no integra Sincronizando ni la fecha de actualizacion. No se agregaron funcionalidades complementarias.
+Quedan pendientes detalle, pantalla de favoritos, busqueda, filtros y trivia. Favoritos ya tiene persistencia y repositorio probados. Tambien falta la cache de imagenes en disco. La sincronizacion ya reintenta con backoff, se dispara sola al reconectar y cada 15 minutos, y el indicador muestra Sincronizando, la procedencia y la fecha de los datos. No se agregaron funcionalidades complementarias.
 
-La decision principal esta en [ADR-001](<Documentacion/ADR-001 - Fuente local observable.md>).
+Las decisiones principales estan en [ADR-001](<Documentacion/ADR-001 - Fuente local observable.md>) (SQLite como fuente del catalogo) y [ADR-002](<Documentacion/ADR-002 - Politica de sincronizacion y reintentos.md>) (sincronizacion, reintentos, vigencia y deteccion de alteraciones).
 
 El proyecto sigue los enunciados del avance y del proyecto final. Referencias: [Flutter](https://docs.flutter.dev/), [Drift](https://drift.simonbinder.eu/), [Riverpod](https://riverpod.dev/) y [PokeAPI GraphQL](https://pokeapi.co/docs/graphql).
 
