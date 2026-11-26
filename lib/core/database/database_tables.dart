@@ -31,6 +31,8 @@ class PokemonRecords extends Table {
       integer().nullable().check(baseStatTotal.isBiggerOrEqualValue(0))();
   // false en formas alternativas (Alola, Galar...) de la misma especie.
   BoolColumn get isDefault => boolean().withDefault(const Constant(true))();
+  // v3: artwork shiny (o sprite shiny de respaldo); lo completa el detalle.
+  TextColumn get shinyImageUrl => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -216,11 +218,28 @@ class Moves extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+// v3: juegos (red-blue, scarlet-violet...) con el orden cronologico de PokeAPI,
+// para el selector de movimientos del detalle (RF-DET-05).
+@DataClassName('VersionGroupRow')
+class VersionGroups extends Table {
+  @override
+  String get tableName => 'version_group';
+
+  IntColumn get id => integer().check(id.isBiggerThanValue(0))();
+  TextColumn get name =>
+      text().unique().check(name.length.isBiggerThanValue(0))();
+  IntColumn get sortOrder =>
+      integer().check(sortOrder.isBiggerOrEqualValue(0))();
+
+  @override
+  Set<Column> get primaryKey => {id};
+}
+
 @DataClassName('PokemonMoveRow')
 // Consulta por defecto del detalle: un version group y un metodo (RF-DET-05).
 @TableIndex(
   name: 'pokemon_move_by_version',
-  columns: {#pokemonId, #versionGroup, #learnMethod},
+  columns: {#pokemonId, #versionGroupId, #learnMethod},
 )
 class PokemonMoves extends Table {
   @override
@@ -229,8 +248,7 @@ class PokemonMoves extends Table {
   IntColumn get pokemonId =>
       integer().references(PokemonRecords, #id, onDelete: KeyAction.cascade)();
   IntColumn get moveId => integer().references(Moves, #id)();
-  TextColumn get versionGroup =>
-      text().check(versionGroup.length.isBiggerThanValue(0))();
+  IntColumn get versionGroupId => integer().references(VersionGroups, #id)();
   // level-up, machine, tutor, egg...
   TextColumn get learnMethod =>
       text().check(learnMethod.length.isBiggerThanValue(0))();
@@ -238,8 +256,16 @@ class PokemonMoves extends Table {
       .withDefault(const Constant(0))
       .check(levelLearned.isBiggerOrEqualValue(0))();
 
+  // El nivel es parte de la clave: PokeAPI registra algunos movimientos dos
+  // veces en el mismo juego (vine-whip de bulbasaur en sun-moon: 7 y 9).
   @override
-  Set<Column> get primaryKey => {pokemonId, moveId, versionGroup, learnMethod};
+  Set<Column> get primaryKey => {
+    pokemonId,
+    moveId,
+    versionGroupId,
+    learnMethod,
+    levelLearned,
+  };
 }
 
 @DataClassName('EggGroupRow')

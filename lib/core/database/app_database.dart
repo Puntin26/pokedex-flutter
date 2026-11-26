@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 
 import 'database_tables.dart';
+import 'schema_versions.dart';
 
 part 'app_database.g.dart';
 
@@ -20,6 +21,7 @@ part 'app_database.g.dart';
     Abilities,
     PokemonAbilities,
     Moves,
+    VersionGroups,
     PokemonMoves,
     EggGroups,
     SpeciesEggGroups,
@@ -37,56 +39,75 @@ class AppDatabase extends _$AppDatabase {
     : super(executor ?? driftDatabase(name: 'pokedex'));
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) => migrator.createAll(),
-    onUpgrade: (migrator, from, to) async {
-      // Cada version suma pasos que conservan los datos; nunca se borra la base.
-      if (from < 2) await _migrateToV2(migrator);
-    },
+    // Paso a paso con la copia del esquema de cada version (schema_versions.dart):
+    // cada paso solo agrega o recrea tablas vacias; nunca se borran datos.
+    onUpgrade: stepByStep(from1To2: _migrateToV2, from2To3: _migrateToV3),
     beforeOpen: (details) async {
       await customStatement('PRAGMA foreign_keys = ON');
     },
   );
 
   // v1 -> v2: solo agrega; catalogo, tipos, favoritos y sync_metadata se conservan.
-  Future<void> _migrateToV2(Migrator migrator) async {
+  static Future<void> _migrateToV2(Migrator m, Schema2 schema) async {
     // generation y species primero: pokemon.species_id las referencia.
     for (final table in <TableInfo>[
-      generations,
-      pokemonSpecies,
-      stats,
-      pokemonStats,
-      abilities,
-      pokemonAbilities,
-      moves,
-      pokemonMoves,
-      eggGroups,
-      speciesEggGroups,
-      evolutions,
-      typeEfficacies,
-      triviaResults,
-      triviaAnswers,
-      achievements,
-      appSettings,
-      imageCacheEntries,
+      schema.generation,
+      schema.species,
+      schema.stat,
+      schema.pokemonStat,
+      schema.ability,
+      schema.pokemonAbility,
+      schema.move,
+      schema.pokemonMove,
+      schema.eggGroup,
+      schema.speciesEggGroup,
+      schema.evolution,
+      schema.typeEfficacy,
+      schema.triviaResult,
+      schema.triviaAnswer,
+      schema.achievement,
+      schema.appSetting,
+      schema.imageCache,
     ]) {
-      await migrator.createTable(table);
+      await m.createTable(table);
     }
     // Columnas nulas o con default: las filas existentes quedan validas.
-    await migrator.addColumn(pokemonRecords, pokemonRecords.speciesId);
-    await migrator.addColumn(pokemonRecords, pokemonRecords.height);
-    await migrator.addColumn(pokemonRecords, pokemonRecords.weight);
-    await migrator.addColumn(pokemonRecords, pokemonRecords.baseStatTotal);
-    await migrator.addColumn(pokemonRecords, pokemonRecords.isDefault);
-    // createTable no crea indices: se crean todos los que no existian en v1.
-    const v1Indexes = {'pokemon_national_order', 'favorite_creation_order'};
-    for (final index in allSchemaEntities.whereType<Index>()) {
-      if (!v1Indexes.contains(index.entityName)) {
-        await migrator.createIndex(index);
-      }
+    final pokemon = schema.pokemon;
+    await m.addColumn(pokemon, pokemon.speciesId);
+    await m.addColumn(pokemon, pokemon.height);
+    await m.addColumn(pokemon, pokemon.weight);
+    await m.addColumn(pokemon, pokemon.baseStatTotal);
+    await m.addColumn(pokemon, pokemon.isDefault);
+    for (final index in [
+      schema.pokemonName,
+      schema.pokemonSpeciesLookup,
+      schema.pokemonStatTotalOrder,
+      schema.pokemonTypeByType,
+      schema.speciesGeneration,
+      schema.pokemonAbilityByAbility,
+      schema.pokemonMoveByVersion,
+      schema.evolutionToSpecies,
+      schema.triviaResultRanking,
+      schema.triviaAnswerByResult,
+      schema.imageCacheLru,
+    ]) {
+      await m.createIndex(index);
     }
+  }
+
+  // v2 -> v3: imagen shiny y version groups ordenados para los movimientos.
+  static Future<void> _migrateToV3(Migrator m, Schema3 schema) async {
+    await m.createTable(schema.versionGroup);
+    // pokemon_move cambia su clave (version_group texto -> id). En v2 ninguna
+    // instalacion escribe en ella, asi que recrearla no pierde datos.
+    await m.deleteTable('pokemon_move');
+    await m.createTable(schema.pokemonMove);
+    await m.createIndex(schema.pokemonMoveByVersion);
+    await m.addColumn(schema.pokemon, schema.pokemon.shinyImageUrl);
   }
 }

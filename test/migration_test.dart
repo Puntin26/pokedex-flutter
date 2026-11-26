@@ -11,14 +11,17 @@ void main() {
 
   setUpAll(() => verifier = SchemaVerifier(GeneratedHelper()));
 
-  test('v1 -> v2 produce exactamente el esquema v2', () async {
-    final schema = await verifier.schemaAt(1);
-    final database = AppDatabase(schema.newConnection());
-    addTearDown(database.close);
-    await verifier.migrateAndValidate(database, 2);
-  });
+  // Cada version inicial migra a un esquema identico al de una instalacion nueva.
+  for (final from in [1, 2]) {
+    test('v$from -> v3 produce exactamente el esquema actual', () async {
+      final schema = await verifier.schemaAt(from);
+      final database = AppDatabase(schema.newConnection());
+      addTearDown(database.close);
+      await verifier.migrateAndValidate(database, 3);
+    });
+  }
 
-  test('v1 -> v2 conserva catalogo, tipos, favoritos y progreso de sync', () async {
+  test('v1 -> v3 conserva catalogo, tipos, favoritos y progreso de sync', () async {
     final schema = await verifier.schemaAt(1);
     final v1 = schema.rawDatabase;
     // Fechas como segundos Unix: el formato que usa Drift en v1.
@@ -38,7 +41,7 @@ void main() {
 
     final database = AppDatabase(schema.newConnection());
     addTearDown(database.close);
-    await verifier.migrateAndValidate(database, 2);
+    await verifier.migrateAndValidate(database, 3);
 
     final pokemon = await (database.select(
       database.pokemonRecords,
@@ -76,11 +79,11 @@ void main() {
     expect(await database.select(database.appSettings).get(), hasLength(1));
   });
 
-  test('v2 hace cumplir las llaves foraneas de las tablas nuevas', () async {
+  test('v3 hace cumplir las llaves foraneas de las tablas nuevas', () async {
     final schema = await verifier.schemaAt(1);
     final database = AppDatabase(schema.newConnection());
     addTearDown(database.close);
-    await verifier.migrateAndValidate(database, 2);
+    await verifier.migrateAndValidate(database, 3);
 
     await expectLater(
       database
@@ -94,5 +97,65 @@ void main() {
           ),
       throwsA(isA<Exception>()),
     );
+  });
+
+  test('v2 -> v3 conserva datos v2 y agrega shiny y version groups', () async {
+    final schema = await verifier.schemaAt(2);
+    schema.rawDatabase.execute('''
+      INSERT INTO generation (id, name, region_name)
+        VALUES (1, 'generation-i', 'kanto');
+      INSERT INTO species (id, name, generation_id) VALUES (1, 'bulbasaur', 1);
+      INSERT INTO pokemon (id, national_number, name, image_url, updated_at,
+          species_id, height, weight, base_stat_total, is_default)
+        VALUES (1, 1, 'bulbasaur', 'https://img/1.png', 1764000000,
+          1, 7, 69, 318, 1);
+      INSERT INTO ability (id, name, effect_summary)
+        VALUES (65, 'overgrow', NULL);
+      INSERT INTO pokemon_ability (pokemon_id, ability_id, slot, is_hidden)
+        VALUES (1, 65, 1, 0);
+      INSERT INTO favorite (pokemon_id, created_at) VALUES (1, 1764100000);
+      INSERT INTO app_setting (key, value) VALUES ('catalog.query', '{"typeId":12}');
+    ''');
+
+    final database = AppDatabase(schema.newConnection());
+    addTearDown(database.close);
+    await verifier.migrateAndValidate(database, 3);
+
+    final pokemon = await database.select(database.pokemonRecords).getSingle();
+    expect(pokemon.baseStatTotal, 318);
+    expect(pokemon.speciesId, 1);
+    expect(pokemon.shinyImageUrl, isNull);
+    expect(
+      await database.select(database.pokemonAbilities).get(),
+      hasLength(1),
+    );
+    expect(await database.select(database.favorites).get(), hasLength(1));
+    final setting = await database.select(database.appSettings).getSingle();
+    expect(setting.value, '{"typeId":12}');
+    // pokemon_move se recreo con version_group_id (estaba vacia en v2).
+    await database
+        .into(database.versionGroups)
+        .insert(
+          VersionGroupsCompanion.insert(
+            id: const Value(25),
+            name: 'scarlet-violet',
+            sortOrder: 28,
+          ),
+        );
+    await database
+        .into(database.moves)
+        .insert(MovesCompanion.insert(id: const Value(33), name: 'tackle'));
+    await database
+        .into(database.pokemonMoves)
+        .insert(
+          PokemonMovesCompanion.insert(
+            pokemonId: 1,
+            moveId: 33,
+            versionGroupId: 25,
+            learnMethod: 'level-up',
+            levelLearned: const Value(1),
+          ),
+        );
+    expect(await database.select(database.pokemonMoves).get(), hasLength(1));
   });
 }
