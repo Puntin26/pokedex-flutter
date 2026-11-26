@@ -45,9 +45,19 @@ Documentacion/           Decision de arquitectura (ADR)
 
 `presentation` muestra el estado, `domain` define entidades y contratos en Dart puro, y `data` implementa el acceso a datos. La UI observa SQLite mediante el repositorio y Riverpod. Las respuestas GraphQL solo actualizan la base local.
 
-La base `pokedex.sqlite`, esquema version 1, contiene `pokemon`, `type`, `pokemon_type`, `favorite` y `sync_metadata`. El ID remoto identifica cada Pokemon, distintas formas pueden compartir numero nacional. La relacion Pokemon-tipo tiene clave compuesta y una posicion unica por Pokemon. Cada favorito referencia un Pokemon y guarda su fecha.
+La base `pokedex.sqlite` esta en el **esquema version 2** y sigue el modelo conceptual del enunciado (Diagrama 6). Las claves del catalogo son los IDs de PokeAPI, asi cada registro se identifica igual entre sincronizaciones y se actualiza por upsert sin duplicarse (PS-05, PS-06).
 
-Las claves y restricciones evitan duplicados y referencias invalidas. Hay indices para ordenar el catalogo por numero/ID y favoritos por fecha/ID. La metadata guarda recurso, siguiente offset, total, estado, fecha de la ultima pagina confirmada, error y completitud. Los cambios futuros del esquema requieren migraciones que conserven los datos.
+| Grupo | Tablas | Claves y relaciones |
+|---|---|---|
+| Catalogo | `pokemon`, `type`, `pokemon_type` | `pokemon.id`; `pokemon.species_id` → `species`; tipo por Pokemon con clave (pokemon, tipo) y posicion unica |
+| Especies | `generation`, `species`, `egg_group`, `species_egg_group`, `evolution` | Evoluciones y egg groups son de la especie; varias filas desde la misma especie son ramas. Las formas (Alola, Galar...) son varios `pokemon` con la misma especie e `is_default = false` |
+| Detalle | `stat`, `pokemon_stat`, `ability`, `pokemon_ability`, `move`, `pokemon_move`, `type_efficacy` | Claves compuestas; `pokemon_move` por (pokemon, movimiento, version group, metodo); `type_efficacy` guarda el multiplicador 0/50/100/200 de PokeAPI |
+| Usuario | `favorite`, `trivia_result`, `trivia_answer`, `achievement`, `app_setting` | Solo locales; la sincronizacion del catalogo nunca los escribe (PS-11) |
+| Sistema | `sync_metadata`, `image_cache` | Estado de sync por recurso; imagenes en disco con tamano y ultimo acceso para limpieza LRU (PS-08) |
+
+Las tablas hijas del catalogo se borran en cascada con su Pokemon; las de usuario no, para no perder datos. Hay restricciones `check` (valores no negativos, posiciones validas, multiplicadores permitidos) y llaves foraneas activas. Los indices cubren lo que el catalogo filtra y ordena: numero nacional, nombre, total de estadisticas, tipo (`pokemon_type(type_id)`), generacion de la especie, movimientos por version y metodo, ranking de trivia y orden LRU de imagenes (RNF-REN-02).
+
+La migracion v1 → v2 solo agrega tablas, columnas nulas o con valor por defecto e indices, asi el catalogo, los favoritos y el progreso de sync se conservan. Las columnas nuevas quedan nulas hasta la siguiente sincronizacion. Cada version tiene su copia en `drift_schemas/` y `test/migration_test.dart` comprueba que una base v1 con datos migra a un esquema identico al de una instalacion nueva.
 
 ## GraphQL y sincronizacion
 
