@@ -1,6 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'catalog_filter_bar.dart';
+import 'catalog_query_controller.dart';
 import 'pokemon_catalog_controller.dart';
 import 'pokemon_catalog_state.dart';
 import 'pokemon_card.dart';
@@ -33,20 +35,55 @@ class PokemonPage extends ConsumerWidget {
                   ],
                 ),
               ),
+            const CatalogFilterBar(),
+            if (catalog.isPartial)
+              _PartialCatalogNotice(
+                downloaded: catalog.partialDownloaded!,
+                total: catalog.partialTotal!,
+              ),
             if (catalog.isSyncing && catalog.pokemon.isNotEmpty)
               const Padding(
                 padding: EdgeInsets.all(8),
                 child: Text('Actualizando catalogo...'),
               ),
-            Expanded(child: _catalogBody(catalog, retry)),
+            Expanded(
+              child: _catalogBody(
+                catalog,
+                retry,
+                () => ref.read(catalogQueryProvider.notifier).clearFilters(),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _catalogBody(PokemonCatalogState catalog, VoidCallback retry) {
+  Widget _catalogBody(
+    PokemonCatalogState catalog,
+    VoidCallback retry,
+    VoidCallback clearFilters,
+  ) {
     switch (catalog.status) {
+      case PokemonCatalogStatus.noResults:
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Ningun Pokemon coincide con la busqueda o los filtros.',
+                  textAlign: TextAlign.center,
+                ),
+                TextButton(
+                  onPressed: clearFilters,
+                  child: const Text('Limpiar filtros'),
+                ),
+              ],
+            ),
+          ),
+        );
       case PokemonCatalogStatus.loading:
         return const Center(
           child: Column(
@@ -81,5 +118,32 @@ class PokemonPage extends ConsumerWidget {
           },
         );
     }
+  }
+}
+
+// Con el catalogo incompleto, buscar y filtrar puede no encontrar todo (RF-FIL-05).
+class _PartialCatalogNotice extends StatelessWidget {
+  const _PartialCatalogNotice({required this.downloaded, required this.total});
+
+  final int downloaded;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        children: [
+          const Icon(Icons.info_outline, size: 20),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Catalogo parcial: $downloaded de $total Pokemon descargados. '
+              'La busqueda puede no mostrar todos.',
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

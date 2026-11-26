@@ -23,6 +23,9 @@ class CatalogQuery {
   String get normalizedSearch =>
       search.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
 
+  bool get isFiltered =>
+      normalizedSearch.isNotEmpty || typeId != null || generationId != null;
+
   // _keep distingue "no cambiar" de "quitar el filtro" (null).
   CatalogQuery copyWith({
     String? search,
