@@ -43,6 +43,31 @@ class LocalFavoritesRepository implements FavoritesRepository {
   }
 
   @override
+  Stream<Set<int>> watchFavoriteIds() {
+    final query = database.selectOnly(database.favorites)
+      ..addColumns([database.favorites.pokemonId]);
+    return query.watch().map(
+      (rows) => {
+        for (final row in rows) row.read(database.favorites.pokemonId)!,
+      },
+    );
+  }
+
+  // En una transaccion: dos toques seguidos se serializan (agrega y luego quita)
+  // en lugar de leer ambos el mismo estado viejo.
+  @override
+  Future<bool> toggleFavorite(int pokemonId, DateTime createdAt) {
+    return database.transaction(() async {
+      final removed = await (database.delete(
+        database.favorites,
+      )..where((row) => row.pokemonId.equals(pokemonId))).go();
+      if (removed > 0) return false;
+      await addFavorite(pokemonId, createdAt);
+      return true;
+    });
+  }
+
+  @override
   Future<void> addFavorite(int pokemonId, DateTime createdAt) async {
     await database
         .into(database.favorites)
