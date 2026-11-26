@@ -91,9 +91,9 @@ Cerrar y abrir la app: debe conservar el catalogo y mostrar Servicio no disponib
 
 ## Limites y documentacion
 
-Quedan pendientes detalle, pantalla de favoritos, busqueda, filtros y trivia. Favoritos ya tiene persistencia y repositorio probados. Tambien faltan cache de imagenes en disco, politica de vigencia, reintentos con backoff y sincronizacion al reconectar. El indicador aun no integra Sincronizando ni la fecha de actualizacion. No se agregaron funcionalidades complementarias.
+Quedan pendientes detalle, pantalla de favoritos, busqueda, filtros y trivia. Favoritos ya tiene persistencia y repositorio probados. Tambien falta la cache de imagenes en disco. La sincronizacion ya reintenta con backoff, se dispara sola al reconectar y cada 15 minutos, y el indicador muestra Sincronizando, la procedencia y la fecha de los datos. No se agregaron funcionalidades complementarias.
 
-La decision principal esta en [ADR-001](<Documentacion/ADR-001 - Fuente local observable.md>).
+Las decisiones principales estan en [ADR-001](<Documentacion/ADR-001 - Fuente local observable.md>) (SQLite como fuente del catalogo) y [ADR-002](<Documentacion/ADR-002 - Politica de sincronizacion y reintentos.md>) (sincronizacion, reintentos, vigencia y deteccion de alteraciones).
 
 El proyecto sigue los enunciados del avance y del proyecto final. Referencias: [Flutter](https://docs.flutter.dev/), [Drift](https://drift.simonbinder.eu/), [Riverpod](https://riverpod.dev/) y [PokeAPI GraphQL](https://pokeapi.co/docs/graphql).
 
