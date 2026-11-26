@@ -7,6 +7,7 @@ import 'catalog_query_controller.dart';
 import 'pokemon_catalog_controller.dart';
 import 'pokemon_catalog_state.dart';
 import 'pokemon_card.dart';
+import 'pokemon_detail_page.dart';
 
 class PokemonPage extends ConsumerWidget {
   const PokemonPage({super.key, this.cardTrailing});
@@ -120,10 +121,20 @@ class PokemonPage extends ConsumerWidget {
           itemCount: catalog.pokemon.length,
           itemBuilder: (context, index) {
             final pokemon = catalog.pokemon[index];
+            final heroTag = 'catalog-${pokemon.id}';
             return PokemonCard(
               key: ValueKey(pokemon.id),
               pokemon: pokemon,
+              heroTag: heroTag,
               trailing: cardTrailing?.call(pokemon),
+              // El mismo corazon de la tarjeta aparece en el detalle (RF-DET-10).
+              onTap: () => Navigator.of(context).push(
+                pokemonDetailRoute(
+                  pokemon.id,
+                  heroTag: heroTag,
+                  action: cardTrailing,
+                ),
+              ),
             );
           },
         );

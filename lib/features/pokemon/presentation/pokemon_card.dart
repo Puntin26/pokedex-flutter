@@ -3,42 +3,56 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/pokemon.dart';
 
 class PokemonCard extends StatelessWidget {
-  const PokemonCard({super.key, required this.pokemon, this.trailing});
+  const PokemonCard({
+    super.key,
+    required this.pokemon,
+    this.trailing,
+    this.onTap,
+    this.heroTag,
+  });
 
   final Pokemon pokemon;
   // Accion al final de la tarjeta (el corazon); la compone quien la usa.
   final Widget? trailing;
+  // Abre el detalle; la imagen vuela con Hero si hay etiqueta (RF-COM-02).
+  final VoidCallback? onTap;
+  final Object? heroTag;
 
   @override
   Widget build(BuildContext context) {
+    final image = SizedBox(width: 88, height: 88, child: _image());
     return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          children: [
-            SizedBox(width: 88, height: 88, child: _image()),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('#${pokemon.nationalNumber}'),
-                  Text(
-                    pokemon.name,
-                    style: Theme.of(context).textTheme.titleMedium,
-                  ),
-                  Wrap(
-                    spacing: 6,
-                    children: [
-                      for (final type in pokemon.types)
-                        Chip(label: Text(type.type.name)),
-                    ],
-                  ),
-                ],
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              heroTag == null ? image : Hero(tag: heroTag!, child: image),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('#${pokemon.nationalNumber}'),
+                    Text(
+                      pokemon.name,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Wrap(
+                      spacing: 6,
+                      children: [
+                        for (final type in pokemon.types)
+                          Chip(label: Text(type.type.name)),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            ?trailing,
-          ],
+              ?trailing,
+            ],
+          ),
         ),
       ),
     );

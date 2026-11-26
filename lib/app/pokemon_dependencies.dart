@@ -6,9 +6,14 @@ import '../core/database/app_database.dart';
 import '../core/domain/sync_activity.dart';
 import '../core/network/pokeapi_graphql_client.dart';
 import '../core/sync/retry_policy.dart';
+import '../features/pokemon/data/local_pokemon_detail_repository.dart';
 import '../features/pokemon/data/local_pokemon_repository.dart';
+import '../features/pokemon/data/pokemon_detail_sync_coordinator.dart';
+import '../features/pokemon/data/remote_pokemon_detail_source.dart';
 import '../features/pokemon/data/pokemon_sync_coordinator.dart';
 import '../features/pokemon/data/remote_pokemon_source.dart';
+import '../features/pokemon/domain/pokemon_detail_repository.dart';
+import '../features/pokemon/domain/pokemon_detail_sync.dart';
 import '../features/pokemon/domain/pokemon_repository.dart';
 import '../features/pokemon/domain/pokemon_sync.dart';
 import 'api_outage_simulation.dart';
@@ -45,4 +50,17 @@ final pokemonSyncProvider = Provider<PokemonSync>((ref) {
 // Actividad de sync del catalogo; la consume el indicador global (tarea 1.5).
 final catalogSyncActivityProvider = StreamProvider<SyncActivity>(
   (ref) => ref.watch(pokemonSyncProvider).watchActivity(),
+);
+
+final pokemonDetailRepositoryProvider = Provider<PokemonDetailRepository>(
+  (ref) => LocalPokemonDetailRepository(ref.watch(appDatabaseProvider)),
+);
+
+// Mismo cliente que el catalogo: el interruptor de PA-08 tambien lo afecta.
+final pokemonDetailSyncProvider = Provider<PokemonDetailSync>(
+  (ref) => PokemonDetailSyncCoordinator(
+    remote: GraphqlPokemonDetailSource(ref.watch(pokeApiClientProvider)),
+    local: ref.watch(pokemonDetailRepositoryProvider),
+    retryPolicy: RetryPolicy(),
+  ),
 );

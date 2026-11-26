@@ -4,11 +4,15 @@ import 'package:pokedex/core/database/app_database.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
 import 'package:pokedex/core/network/pokeapi_graphql_client.dart';
 import 'package:pokedex/features/favorites/data/local_favorites_repository.dart';
+import 'package:pokedex/features/pokemon/data/local_pokemon_detail_repository.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
+import 'package:pokedex/features/pokemon/data/pokemon_detail_sync_coordinator.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_page_dto.dart';
+import 'package:pokedex/features/pokemon/data/remote_pokemon_detail_source.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_sync_coordinator.dart';
 import 'package:pokedex/features/pokemon/data/remote_pokemon_source.dart';
 import 'package:pokedex/features/pokemon/domain/catalog_query.dart';
+import 'package:pokedex/features/pokemon/domain/move_query.dart';
 
 // Comprobacion manual: no forma parte de la suite automatizada sin Internet.
 void main() {
@@ -81,4 +85,45 @@ void main() {
       'PokeAPI: 2 solicitudes, 4 Pokemon en SQLite, total $total, offset $offset, favorito conservado.',
     );
   }, timeout: const Timeout(Duration(seconds: 90)));
+
+  test(
+    'PokeAPI real: detalle de eevee y bulbasaur se valida y se guarda',
+    () async {
+      final client = createPokeApiClient();
+      final database = AppDatabase(NativeDatabase.memory());
+      addTearDown(database.close);
+      addTearDown(client.link.dispose);
+      final repository = LocalPokemonDetailRepository(database);
+      final sync = PokemonDetailSyncCoordinator(
+        remote: GraphqlPokemonDetailSource(client),
+        local: repository,
+      );
+
+      await sync.synchronize(133);
+      final eevee = (await repository.watchDetail(133).first)!;
+      expect(eevee.pokemon.name, 'eevee');
+      expect(eevee.stats, hasLength(6));
+      expect(eevee.pokemon.shinyImageUrl, contains('shiny'));
+      expect(eevee.evolutions.length, greaterThanOrEqualTo(8));
+      expect(eevee.abilities.where((entry) => entry.isHidden), isNotEmpty);
+      expect(eevee.versionGroups, isNotEmpty);
+      expect((await repository.watchTypeEfficacy().first).rows, hasLength(324));
+
+      // Bulbasaur tiene vine-whip dos veces en sun-moon (niveles 7 y 9).
+      await sync.synchronize(1);
+      final bulbasaur = (await repository.watchDetail(1).first)!;
+      final sunMoon = bulbasaur.versionGroups.firstWhere(
+        (group) => group.name == 'sun-moon',
+      );
+      final moves = await repository
+          .watchMoves(MoveQuery(pokemonId: 1, versionGroupId: sunMoon.id))
+          .first;
+      expect(
+        moves
+            .where((move) => move.name == 'vine-whip')
+            .map((move) => move.level),
+        [7, 9],
+      );
+    },
+  );
 }

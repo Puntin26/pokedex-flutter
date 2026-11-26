@@ -692,6 +692,17 @@ class $PokemonRecordsTable extends PokemonRecords
     ),
     defaultValue: const Constant(true),
   );
+  static const VerificationMeta _shinyImageUrlMeta = const VerificationMeta(
+    'shinyImageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> shinyImageUrl = GeneratedColumn<String>(
+    'shiny_image_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -704,6 +715,7 @@ class $PokemonRecordsTable extends PokemonRecords
     weight,
     baseStatTotal,
     isDefault,
+    shinyImageUrl,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -786,6 +798,15 @@ class $PokemonRecordsTable extends PokemonRecords
         isDefault.isAcceptableOrUnknown(data['is_default']!, _isDefaultMeta),
       );
     }
+    if (data.containsKey('shiny_image_url')) {
+      context.handle(
+        _shinyImageUrlMeta,
+        shinyImageUrl.isAcceptableOrUnknown(
+          data['shiny_image_url']!,
+          _shinyImageUrlMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -835,6 +856,10 @@ class $PokemonRecordsTable extends PokemonRecords
         DriftSqlType.bool,
         data['${effectivePrefix}is_default'],
       )!,
+      shinyImageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}shiny_image_url'],
+      ),
     );
   }
 
@@ -855,6 +880,7 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
   final int? weight;
   final int? baseStatTotal;
   final bool isDefault;
+  final String? shinyImageUrl;
   const PokemonRow({
     required this.id,
     required this.nationalNumber,
@@ -866,6 +892,7 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
     this.weight,
     this.baseStatTotal,
     required this.isDefault,
+    this.shinyImageUrl,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -890,6 +917,9 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
       map['base_stat_total'] = Variable<int>(baseStatTotal);
     }
     map['is_default'] = Variable<bool>(isDefault);
+    if (!nullToAbsent || shinyImageUrl != null) {
+      map['shiny_image_url'] = Variable<String>(shinyImageUrl);
+    }
     return map;
   }
 
@@ -915,6 +945,9 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
           ? const Value.absent()
           : Value(baseStatTotal),
       isDefault: Value(isDefault),
+      shinyImageUrl: shinyImageUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shinyImageUrl),
     );
   }
 
@@ -934,6 +967,7 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
       weight: serializer.fromJson<int?>(json['weight']),
       baseStatTotal: serializer.fromJson<int?>(json['baseStatTotal']),
       isDefault: serializer.fromJson<bool>(json['isDefault']),
+      shinyImageUrl: serializer.fromJson<String?>(json['shinyImageUrl']),
     );
   }
   @override
@@ -950,6 +984,7 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
       'weight': serializer.toJson<int?>(weight),
       'baseStatTotal': serializer.toJson<int?>(baseStatTotal),
       'isDefault': serializer.toJson<bool>(isDefault),
+      'shinyImageUrl': serializer.toJson<String?>(shinyImageUrl),
     };
   }
 
@@ -964,6 +999,7 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
     Value<int?> weight = const Value.absent(),
     Value<int?> baseStatTotal = const Value.absent(),
     bool? isDefault,
+    Value<String?> shinyImageUrl = const Value.absent(),
   }) => PokemonRow(
     id: id ?? this.id,
     nationalNumber: nationalNumber ?? this.nationalNumber,
@@ -977,6 +1013,9 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
         ? baseStatTotal.value
         : this.baseStatTotal,
     isDefault: isDefault ?? this.isDefault,
+    shinyImageUrl: shinyImageUrl.present
+        ? shinyImageUrl.value
+        : this.shinyImageUrl,
   );
   PokemonRow copyWithCompanion(PokemonRecordsCompanion data) {
     return PokemonRow(
@@ -994,6 +1033,9 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
           ? data.baseStatTotal.value
           : this.baseStatTotal,
       isDefault: data.isDefault.present ? data.isDefault.value : this.isDefault,
+      shinyImageUrl: data.shinyImageUrl.present
+          ? data.shinyImageUrl.value
+          : this.shinyImageUrl,
     );
   }
 
@@ -1009,7 +1051,8 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
           ..write('height: $height, ')
           ..write('weight: $weight, ')
           ..write('baseStatTotal: $baseStatTotal, ')
-          ..write('isDefault: $isDefault')
+          ..write('isDefault: $isDefault, ')
+          ..write('shinyImageUrl: $shinyImageUrl')
           ..write(')'))
         .toString();
   }
@@ -1026,6 +1069,7 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
     weight,
     baseStatTotal,
     isDefault,
+    shinyImageUrl,
   );
   @override
   bool operator ==(Object other) =>
@@ -1040,7 +1084,8 @@ class PokemonRow extends DataClass implements Insertable<PokemonRow> {
           other.height == this.height &&
           other.weight == this.weight &&
           other.baseStatTotal == this.baseStatTotal &&
-          other.isDefault == this.isDefault);
+          other.isDefault == this.isDefault &&
+          other.shinyImageUrl == this.shinyImageUrl);
 }
 
 class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
@@ -1054,6 +1099,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
   final Value<int?> weight;
   final Value<int?> baseStatTotal;
   final Value<bool> isDefault;
+  final Value<String?> shinyImageUrl;
   const PokemonRecordsCompanion({
     this.id = const Value.absent(),
     this.nationalNumber = const Value.absent(),
@@ -1065,6 +1111,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
     this.weight = const Value.absent(),
     this.baseStatTotal = const Value.absent(),
     this.isDefault = const Value.absent(),
+    this.shinyImageUrl = const Value.absent(),
   });
   PokemonRecordsCompanion.insert({
     this.id = const Value.absent(),
@@ -1077,6 +1124,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
     this.weight = const Value.absent(),
     this.baseStatTotal = const Value.absent(),
     this.isDefault = const Value.absent(),
+    this.shinyImageUrl = const Value.absent(),
   }) : nationalNumber = Value(nationalNumber),
        name = Value(name),
        updatedAt = Value(updatedAt);
@@ -1091,6 +1139,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
     Expression<int>? weight,
     Expression<int>? baseStatTotal,
     Expression<bool>? isDefault,
+    Expression<String>? shinyImageUrl,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1103,6 +1152,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
       if (weight != null) 'weight': weight,
       if (baseStatTotal != null) 'base_stat_total': baseStatTotal,
       if (isDefault != null) 'is_default': isDefault,
+      if (shinyImageUrl != null) 'shiny_image_url': shinyImageUrl,
     });
   }
 
@@ -1117,6 +1167,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
     Value<int?>? weight,
     Value<int?>? baseStatTotal,
     Value<bool>? isDefault,
+    Value<String?>? shinyImageUrl,
   }) {
     return PokemonRecordsCompanion(
       id: id ?? this.id,
@@ -1129,6 +1180,7 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
       weight: weight ?? this.weight,
       baseStatTotal: baseStatTotal ?? this.baseStatTotal,
       isDefault: isDefault ?? this.isDefault,
+      shinyImageUrl: shinyImageUrl ?? this.shinyImageUrl,
     );
   }
 
@@ -1165,6 +1217,9 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
     if (isDefault.present) {
       map['is_default'] = Variable<bool>(isDefault.value);
     }
+    if (shinyImageUrl.present) {
+      map['shiny_image_url'] = Variable<String>(shinyImageUrl.value);
+    }
     return map;
   }
 
@@ -1180,7 +1235,8 @@ class PokemonRecordsCompanion extends UpdateCompanion<PokemonRow> {
           ..write('height: $height, ')
           ..write('weight: $weight, ')
           ..write('baseStatTotal: $baseStatTotal, ')
-          ..write('isDefault: $isDefault')
+          ..write('isDefault: $isDefault, ')
+          ..write('shinyImageUrl: $shinyImageUrl')
           ..write(')'))
         .toString();
   }
@@ -3716,6 +3772,255 @@ class MovesCompanion extends UpdateCompanion<MoveRow> {
   }
 }
 
+class $VersionGroupsTable extends VersionGroups
+    with TableInfo<$VersionGroupsTable, VersionGroupRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $VersionGroupsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(id).isBiggerThanValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(name.length).isBiggerThanValue(0),
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _sortOrderMeta = const VerificationMeta(
+    'sortOrder',
+  );
+  @override
+  late final GeneratedColumn<int> sortOrder = GeneratedColumn<int>(
+    'sort_order',
+    aliasedName,
+    false,
+    check: () => ComparableExpr(sortOrder).isBiggerOrEqualValue(0),
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, sortOrder];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'version_group';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<VersionGroupRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('sort_order')) {
+      context.handle(
+        _sortOrderMeta,
+        sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_sortOrderMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  VersionGroupRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return VersionGroupRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      sortOrder: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}sort_order'],
+      )!,
+    );
+  }
+
+  @override
+  $VersionGroupsTable createAlias(String alias) {
+    return $VersionGroupsTable(attachedDatabase, alias);
+  }
+}
+
+class VersionGroupRow extends DataClass implements Insertable<VersionGroupRow> {
+  final int id;
+  final String name;
+  final int sortOrder;
+  const VersionGroupRow({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['name'] = Variable<String>(name);
+    map['sort_order'] = Variable<int>(sortOrder);
+    return map;
+  }
+
+  VersionGroupsCompanion toCompanion(bool nullToAbsent) {
+    return VersionGroupsCompanion(
+      id: Value(id),
+      name: Value(name),
+      sortOrder: Value(sortOrder),
+    );
+  }
+
+  factory VersionGroupRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return VersionGroupRow(
+      id: serializer.fromJson<int>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      sortOrder: serializer.fromJson<int>(json['sortOrder']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'name': serializer.toJson<String>(name),
+      'sortOrder': serializer.toJson<int>(sortOrder),
+    };
+  }
+
+  VersionGroupRow copyWith({int? id, String? name, int? sortOrder}) =>
+      VersionGroupRow(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        sortOrder: sortOrder ?? this.sortOrder,
+      );
+  VersionGroupRow copyWithCompanion(VersionGroupsCompanion data) {
+    return VersionGroupRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VersionGroupRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, sortOrder);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is VersionGroupRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.sortOrder == this.sortOrder);
+}
+
+class VersionGroupsCompanion extends UpdateCompanion<VersionGroupRow> {
+  final Value<int> id;
+  final Value<String> name;
+  final Value<int> sortOrder;
+  const VersionGroupsCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.sortOrder = const Value.absent(),
+  });
+  VersionGroupsCompanion.insert({
+    this.id = const Value.absent(),
+    required String name,
+    required int sortOrder,
+  }) : name = Value(name),
+       sortOrder = Value(sortOrder);
+  static Insertable<VersionGroupRow> custom({
+    Expression<int>? id,
+    Expression<String>? name,
+    Expression<int>? sortOrder,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (sortOrder != null) 'sort_order': sortOrder,
+    });
+  }
+
+  VersionGroupsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? name,
+    Value<int>? sortOrder,
+  }) {
+    return VersionGroupsCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      sortOrder: sortOrder ?? this.sortOrder,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (sortOrder.present) {
+      map['sort_order'] = Variable<int>(sortOrder.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('VersionGroupsCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('sortOrder: $sortOrder')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $PokemonMovesTable extends PokemonMoves
     with TableInfo<$PokemonMovesTable, PokemonMoveRow> {
   @override
@@ -3748,17 +4053,19 @@ class $PokemonMovesTable extends PokemonMoves
       'REFERENCES move (id)',
     ),
   );
-  static const VerificationMeta _versionGroupMeta = const VerificationMeta(
-    'versionGroup',
+  static const VerificationMeta _versionGroupIdMeta = const VerificationMeta(
+    'versionGroupId',
   );
   @override
-  late final GeneratedColumn<String> versionGroup = GeneratedColumn<String>(
-    'version_group',
+  late final GeneratedColumn<int> versionGroupId = GeneratedColumn<int>(
+    'version_group_id',
     aliasedName,
     false,
-    check: () => ComparableExpr(versionGroup.length).isBiggerThanValue(0),
-    type: DriftSqlType.string,
+    type: DriftSqlType.int,
     requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES version_group (id)',
+    ),
   );
   static const VerificationMeta _learnMethodMeta = const VerificationMeta(
     'learnMethod',
@@ -3789,7 +4096,7 @@ class $PokemonMovesTable extends PokemonMoves
   List<GeneratedColumn> get $columns => [
     pokemonId,
     moveId,
-    versionGroup,
+    versionGroupId,
     learnMethod,
     levelLearned,
   ];
@@ -3821,16 +4128,16 @@ class $PokemonMovesTable extends PokemonMoves
     } else if (isInserting) {
       context.missing(_moveIdMeta);
     }
-    if (data.containsKey('version_group')) {
+    if (data.containsKey('version_group_id')) {
       context.handle(
-        _versionGroupMeta,
-        versionGroup.isAcceptableOrUnknown(
-          data['version_group']!,
-          _versionGroupMeta,
+        _versionGroupIdMeta,
+        versionGroupId.isAcceptableOrUnknown(
+          data['version_group_id']!,
+          _versionGroupIdMeta,
         ),
       );
     } else if (isInserting) {
-      context.missing(_versionGroupMeta);
+      context.missing(_versionGroupIdMeta);
     }
     if (data.containsKey('learn_method')) {
       context.handle(
@@ -3859,8 +4166,9 @@ class $PokemonMovesTable extends PokemonMoves
   Set<GeneratedColumn> get $primaryKey => {
     pokemonId,
     moveId,
-    versionGroup,
+    versionGroupId,
     learnMethod,
+    levelLearned,
   };
   @override
   PokemonMoveRow map(Map<String, dynamic> data, {String? tablePrefix}) {
@@ -3874,9 +4182,9 @@ class $PokemonMovesTable extends PokemonMoves
         DriftSqlType.int,
         data['${effectivePrefix}move_id'],
       )!,
-      versionGroup: attachedDatabase.typeMapping.read(
-        DriftSqlType.string,
-        data['${effectivePrefix}version_group'],
+      versionGroupId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version_group_id'],
       )!,
       learnMethod: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
@@ -3898,13 +4206,13 @@ class $PokemonMovesTable extends PokemonMoves
 class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
   final int pokemonId;
   final int moveId;
-  final String versionGroup;
+  final int versionGroupId;
   final String learnMethod;
   final int levelLearned;
   const PokemonMoveRow({
     required this.pokemonId,
     required this.moveId,
-    required this.versionGroup,
+    required this.versionGroupId,
     required this.learnMethod,
     required this.levelLearned,
   });
@@ -3913,7 +4221,7 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
     final map = <String, Expression>{};
     map['pokemon_id'] = Variable<int>(pokemonId);
     map['move_id'] = Variable<int>(moveId);
-    map['version_group'] = Variable<String>(versionGroup);
+    map['version_group_id'] = Variable<int>(versionGroupId);
     map['learn_method'] = Variable<String>(learnMethod);
     map['level_learned'] = Variable<int>(levelLearned);
     return map;
@@ -3923,7 +4231,7 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
     return PokemonMovesCompanion(
       pokemonId: Value(pokemonId),
       moveId: Value(moveId),
-      versionGroup: Value(versionGroup),
+      versionGroupId: Value(versionGroupId),
       learnMethod: Value(learnMethod),
       levelLearned: Value(levelLearned),
     );
@@ -3937,7 +4245,7 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
     return PokemonMoveRow(
       pokemonId: serializer.fromJson<int>(json['pokemonId']),
       moveId: serializer.fromJson<int>(json['moveId']),
-      versionGroup: serializer.fromJson<String>(json['versionGroup']),
+      versionGroupId: serializer.fromJson<int>(json['versionGroupId']),
       learnMethod: serializer.fromJson<String>(json['learnMethod']),
       levelLearned: serializer.fromJson<int>(json['levelLearned']),
     );
@@ -3948,7 +4256,7 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
     return <String, dynamic>{
       'pokemonId': serializer.toJson<int>(pokemonId),
       'moveId': serializer.toJson<int>(moveId),
-      'versionGroup': serializer.toJson<String>(versionGroup),
+      'versionGroupId': serializer.toJson<int>(versionGroupId),
       'learnMethod': serializer.toJson<String>(learnMethod),
       'levelLearned': serializer.toJson<int>(levelLearned),
     };
@@ -3957,13 +4265,13 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
   PokemonMoveRow copyWith({
     int? pokemonId,
     int? moveId,
-    String? versionGroup,
+    int? versionGroupId,
     String? learnMethod,
     int? levelLearned,
   }) => PokemonMoveRow(
     pokemonId: pokemonId ?? this.pokemonId,
     moveId: moveId ?? this.moveId,
-    versionGroup: versionGroup ?? this.versionGroup,
+    versionGroupId: versionGroupId ?? this.versionGroupId,
     learnMethod: learnMethod ?? this.learnMethod,
     levelLearned: levelLearned ?? this.levelLearned,
   );
@@ -3971,9 +4279,9 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
     return PokemonMoveRow(
       pokemonId: data.pokemonId.present ? data.pokemonId.value : this.pokemonId,
       moveId: data.moveId.present ? data.moveId.value : this.moveId,
-      versionGroup: data.versionGroup.present
-          ? data.versionGroup.value
-          : this.versionGroup,
+      versionGroupId: data.versionGroupId.present
+          ? data.versionGroupId.value
+          : this.versionGroupId,
       learnMethod: data.learnMethod.present
           ? data.learnMethod.value
           : this.learnMethod,
@@ -3988,7 +4296,7 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
     return (StringBuffer('PokemonMoveRow(')
           ..write('pokemonId: $pokemonId, ')
           ..write('moveId: $moveId, ')
-          ..write('versionGroup: $versionGroup, ')
+          ..write('versionGroupId: $versionGroupId, ')
           ..write('learnMethod: $learnMethod, ')
           ..write('levelLearned: $levelLearned')
           ..write(')'))
@@ -3997,14 +4305,14 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
 
   @override
   int get hashCode =>
-      Object.hash(pokemonId, moveId, versionGroup, learnMethod, levelLearned);
+      Object.hash(pokemonId, moveId, versionGroupId, learnMethod, levelLearned);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is PokemonMoveRow &&
           other.pokemonId == this.pokemonId &&
           other.moveId == this.moveId &&
-          other.versionGroup == this.versionGroup &&
+          other.versionGroupId == this.versionGroupId &&
           other.learnMethod == this.learnMethod &&
           other.levelLearned == this.levelLearned);
 }
@@ -4012,14 +4320,14 @@ class PokemonMoveRow extends DataClass implements Insertable<PokemonMoveRow> {
 class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
   final Value<int> pokemonId;
   final Value<int> moveId;
-  final Value<String> versionGroup;
+  final Value<int> versionGroupId;
   final Value<String> learnMethod;
   final Value<int> levelLearned;
   final Value<int> rowid;
   const PokemonMovesCompanion({
     this.pokemonId = const Value.absent(),
     this.moveId = const Value.absent(),
-    this.versionGroup = const Value.absent(),
+    this.versionGroupId = const Value.absent(),
     this.learnMethod = const Value.absent(),
     this.levelLearned = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4027,18 +4335,18 @@ class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
   PokemonMovesCompanion.insert({
     required int pokemonId,
     required int moveId,
-    required String versionGroup,
+    required int versionGroupId,
     required String learnMethod,
     this.levelLearned = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : pokemonId = Value(pokemonId),
        moveId = Value(moveId),
-       versionGroup = Value(versionGroup),
+       versionGroupId = Value(versionGroupId),
        learnMethod = Value(learnMethod);
   static Insertable<PokemonMoveRow> custom({
     Expression<int>? pokemonId,
     Expression<int>? moveId,
-    Expression<String>? versionGroup,
+    Expression<int>? versionGroupId,
     Expression<String>? learnMethod,
     Expression<int>? levelLearned,
     Expression<int>? rowid,
@@ -4046,7 +4354,7 @@ class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
     return RawValuesInsertable({
       if (pokemonId != null) 'pokemon_id': pokemonId,
       if (moveId != null) 'move_id': moveId,
-      if (versionGroup != null) 'version_group': versionGroup,
+      if (versionGroupId != null) 'version_group_id': versionGroupId,
       if (learnMethod != null) 'learn_method': learnMethod,
       if (levelLearned != null) 'level_learned': levelLearned,
       if (rowid != null) 'rowid': rowid,
@@ -4056,7 +4364,7 @@ class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
   PokemonMovesCompanion copyWith({
     Value<int>? pokemonId,
     Value<int>? moveId,
-    Value<String>? versionGroup,
+    Value<int>? versionGroupId,
     Value<String>? learnMethod,
     Value<int>? levelLearned,
     Value<int>? rowid,
@@ -4064,7 +4372,7 @@ class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
     return PokemonMovesCompanion(
       pokemonId: pokemonId ?? this.pokemonId,
       moveId: moveId ?? this.moveId,
-      versionGroup: versionGroup ?? this.versionGroup,
+      versionGroupId: versionGroupId ?? this.versionGroupId,
       learnMethod: learnMethod ?? this.learnMethod,
       levelLearned: levelLearned ?? this.levelLearned,
       rowid: rowid ?? this.rowid,
@@ -4080,8 +4388,8 @@ class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
     if (moveId.present) {
       map['move_id'] = Variable<int>(moveId.value);
     }
-    if (versionGroup.present) {
-      map['version_group'] = Variable<String>(versionGroup.value);
+    if (versionGroupId.present) {
+      map['version_group_id'] = Variable<int>(versionGroupId.value);
     }
     if (learnMethod.present) {
       map['learn_method'] = Variable<String>(learnMethod.value);
@@ -4100,7 +4408,7 @@ class PokemonMovesCompanion extends UpdateCompanion<PokemonMoveRow> {
     return (StringBuffer('PokemonMovesCompanion(')
           ..write('pokemonId: $pokemonId, ')
           ..write('moveId: $moveId, ')
-          ..write('versionGroup: $versionGroup, ')
+          ..write('versionGroupId: $versionGroupId, ')
           ..write('learnMethod: $learnMethod, ')
           ..write('levelLearned: $levelLearned, ')
           ..write('rowid: $rowid')
@@ -6878,6 +7186,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     this,
   );
   late final $MovesTable moves = $MovesTable(this);
+  late final $VersionGroupsTable versionGroups = $VersionGroupsTable(this);
   late final $PokemonMovesTable pokemonMoves = $PokemonMovesTable(this);
   late final $EggGroupsTable eggGroups = $EggGroupsTable(this);
   late final $SpeciesEggGroupsTable speciesEggGroups = $SpeciesEggGroupsTable(
@@ -6925,7 +7234,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   );
   late final Index pokemonMoveByVersion = Index(
     'pokemon_move_by_version',
-    'CREATE INDEX pokemon_move_by_version ON pokemon_move (pokemon_id, version_group, learn_method)',
+    'CREATE INDEX pokemon_move_by_version ON pokemon_move (pokemon_id, version_group_id, learn_method)',
   );
   late final Index evolutionToSpecies = Index(
     'evolution_to_species',
@@ -6960,6 +7269,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     abilities,
     pokemonAbilities,
     moves,
+    versionGroups,
     pokemonMoves,
     eggGroups,
     speciesEggGroups,

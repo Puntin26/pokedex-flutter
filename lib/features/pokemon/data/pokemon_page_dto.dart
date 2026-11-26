@@ -1,6 +1,6 @@
 import 'dart:math';
 
-import '../../../core/domain/sync_failure.dart';
+import 'json_fields.dart';
 import '../domain/pokemon.dart';
 
 class PokemonPageDto {
@@ -14,14 +14,16 @@ class PokemonPageDto {
     required int limit,
     required int offset,
   }) {
-    final aggregate = _object(_object(data['pokemon_aggregate'])['aggregate']);
+    final aggregate = jsonObject(
+      jsonObject(data['pokemon_aggregate'])['aggregate'],
+    );
     final total = aggregate['count'];
     if (total is! int || total < 0 || offset > total) _invalid();
-    final rows = _list(data['pokemon']);
+    final rows = jsonList(data['pokemon']);
     // Un lote truncado sin errores tampoco puede avanzar el progreso.
     if (rows.length != min(limit, total - offset)) _invalid();
     final pokemon = rows
-        .map((row) => PokemonDto.fromJson(_object(row)))
+        .map((row) => PokemonDto.fromJson(jsonObject(row)))
         .toList();
     for (var index = 1; index < pokemon.length; index++) {
       if (pokemon[index].id <= pokemon[index - 1].id) _invalid();
@@ -61,20 +63,20 @@ class PokemonDto {
   final List<PokemonAbility> abilities;
 
   factory PokemonDto.fromJson(Map<String, dynamic> row) {
-    final id = _positiveInt(row['id']);
-    final nationalNumber = _positiveInt(row['pokemon_species_id']);
-    final name = _name(row['name']);
-    final typeRows = _list(row['pokemontypes']);
+    final id = positiveInt(row['id']);
+    final nationalNumber = positiveInt(row['pokemon_species_id']);
+    final name = trimmedName(row['name']);
+    final typeRows = jsonList(row['pokemontypes']);
     if (typeRows.isEmpty || typeRows.length > 2) _invalid();
     final types = typeRows.map((value) {
-      final entry = _object(value);
-      final type = _object(entry['type']);
+      final entry = jsonObject(value);
+      final type = jsonObject(entry['type']);
       return PokemonTypeSlot(
         type: PokemonType(
-          id: _positiveInt(type['id']),
-          name: _name(type['name']),
+          id: positiveInt(type['id']),
+          name: trimmedName(type['name']),
         ),
-        slot: _positiveInt(entry['slot']),
+        slot: positiveInt(entry['slot']),
       );
     }).toList()..sort((a, b) => a.slot.compareTo(b.slot));
     if (types.first.slot != 1) _invalid();
@@ -88,16 +90,16 @@ class PokemonDto {
         _invalid();
       }
     }
-    final sprites = _list(row['pokemonsprites']);
+    final sprites = jsonList(row['pokemonsprites']);
     if (sprites.length > 1) _invalid();
     String? imageUrl;
     if (sprites.isNotEmpty) {
-      final sprite = _object(sprites.single);
+      final sprite = jsonObject(sprites.single);
       if (!sprite.containsKey('artwork') || !sprite.containsKey('front')) {
         _invalid();
       }
-      final artwork = _imageUrl(sprite['artwork']);
-      final front = _imageUrl(sprite['front']);
+      final artwork = optionalHttpsUrl(sprite['artwork']);
+      final front = optionalHttpsUrl(sprite['front']);
       imageUrl = artwork ?? front;
     }
     final species = _species(row['pokemonspecy']);
@@ -105,8 +107,8 @@ class PokemonDto {
     if (species.id != nationalNumber) _invalid();
     final isDefault = row['is_default'];
     if (isDefault is! bool) _invalid();
-    final statSum = _object(
-      _object(_object(row['pokemonstats_aggregate'])['aggregate'])['sum'],
+    final statSum = jsonObject(
+      jsonObject(jsonObject(row['pokemonstats_aggregate'])['aggregate'])['sum'],
     );
     return PokemonDto._(
       id: id,
@@ -115,10 +117,10 @@ class PokemonDto {
       imageUrl: imageUrl,
       types: List.unmodifiable(types),
       species: species,
-      height: _optionalNonNegativeInt(row['height']),
-      weight: _optionalNonNegativeInt(row['weight']),
+      height: optionalNonNegativeInt(row['height']),
+      weight: optionalNonNegativeInt(row['weight']),
       // Nulo si PokeAPI no tiene stats para esa forma.
-      baseStatTotal: _optionalNonNegativeInt(statSum['base_stat']),
+      baseStatTotal: optionalNonNegativeInt(statSum['base_stat']),
       isDefault: isDefault,
       abilities: _abilities(row['pokemonabilities']),
     );
@@ -142,16 +144,16 @@ class PokemonDto {
 
 // Puede venir vacia (hay Pokemon sin habilidades); slots 1-3 sin repetir.
 List<PokemonAbility> _abilities(Object? value) {
-  final abilities = _list(value).map((entry) {
-    final row = _object(entry);
-    final ability = _object(row['ability']);
-    final slot = _positiveInt(row['slot']);
+  final abilities = jsonList(value).map((entry) {
+    final row = jsonObject(entry);
+    final ability = jsonObject(row['ability']);
+    final slot = positiveInt(row['slot']);
     final isHidden = row['is_hidden'];
     if (slot > 3 || isHidden is! bool) _invalid();
     return PokemonAbility(
       ability: Ability(
-        id: _positiveInt(ability['id']),
-        name: _name(ability['name']),
+        id: positiveInt(ability['id']),
+        name: trimmedName(ability['name']),
       ),
       slot: slot,
       isHidden: isHidden,
@@ -166,62 +168,28 @@ List<PokemonAbility> _abilities(Object? value) {
 }
 
 PokemonSpecies _species(Object? value) {
-  final species = _object(value);
+  final species = jsonObject(value);
   final generationValue = species['generation'];
   Generation? generation;
   if (generationValue != null) {
-    final row = _object(generationValue);
+    final row = jsonObject(generationValue);
     final region = row['region'];
     generation = Generation(
-      id: _positiveInt(row['id']),
-      name: _name(row['name']),
-      regionName: region == null ? null : _name(_object(region)['name']),
+      id: positiveInt(row['id']),
+      name: trimmedName(row['name']),
+      regionName: region == null
+          ? null
+          : trimmedName(jsonObject(region)['name']),
     );
   }
   return PokemonSpecies(
-    id: _positiveInt(species['id']),
-    name: _name(species['name']),
+    id: positiveInt(species['id']),
+    name: trimmedName(species['name']),
     generation: generation,
   );
 }
 
-int? _optionalNonNegativeInt(Object? value) {
-  if (value == null) return null;
-  if (value is! int || value < 0) _invalid();
-  return value;
-}
-
-Map<String, dynamic> _object(Object? value) {
-  if (value is! Map<String, dynamic>) _invalid();
-  return value;
-}
-
-List<dynamic> _list(Object? value) {
-  if (value is! List) _invalid();
-  return value;
-}
-
-int _positiveInt(Object? value) {
-  if (value is! int || value <= 0) _invalid();
-  return value;
-}
-
-String _name(Object? value) {
-  if (value is! String || value.trim().isEmpty || value != value.trim()) {
-    _invalid();
-  }
-  return value;
-}
-
-String? _imageUrl(Object? value) {
-  if (value == null) return null;
-  if (value is! String) _invalid();
-  final uri = Uri.tryParse(value);
-  if (uri == null || uri.scheme != 'https' || uri.host.isEmpty) _invalid();
-  return value;
-}
-
-Never _invalid() => throw const SyncFailure(
-  SyncFailureKind.invalidResponse,
+// El mensaje de siempre para el catalogo.
+Never _invalid() => invalidResponse(
   'La pagina del catalogo esta incompleta o contiene datos invalidos.',
 );

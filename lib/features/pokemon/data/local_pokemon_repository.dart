@@ -1,16 +1,22 @@
 import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/database/sync_metadata_store.dart';
 import '../../../core/domain/sync_metadata.dart';
 import '../domain/catalog_query.dart';
 import '../domain/pokemon.dart';
 import '../domain/pokemon_repository.dart';
 import 'pokemon_row_mapper.dart';
+import 'pokemon_writer.dart';
 
 class LocalPokemonRepository implements PokemonRepository {
-  LocalPokemonRepository(this.database);
+  LocalPokemonRepository(this.database)
+    : _writer = PokemonWriter(database),
+      _metadata = SyncMetadataStore(database);
 
   final AppDatabase database;
+  final PokemonWriter _writer;
+  final SyncMetadataStore _metadata;
 
   @override
   Stream<List<Pokemon>> watchCatalog([
@@ -132,162 +138,44 @@ class LocalPokemonRepository implements PokemonRepository {
     );
   }
 
+  // Solo tipos que tiene algun Pokemon: los de movimientos (shadow) no filtran.
   @override
   Stream<List<PokemonType>> watchTypes() {
-    final query = database.select(database.pokemonTypes)
-      ..orderBy([(table) => OrderingTerm.asc(table.name)]);
+    final types = database.pokemonTypes;
+    final links = database.pokemonTypeLinks;
+    final query = database.selectOnly(types, distinct: true)
+      ..addColumns([types.id, types.name])
+      ..join([innerJoin(links, links.typeId.equalsExp(types.id))])
+      ..orderBy([OrderingTerm.asc(types.name)]);
     return query.watch().map(
-      (rows) =>
-          rows.map((row) => PokemonType(id: row.id, name: row.name)).toList(),
+      (rows) => rows
+          .map(
+            (row) => PokemonType(
+              id: row.read(types.id)!,
+              name: row.read(types.name)!,
+            ),
+          )
+          .toList(),
     );
   }
 
-  Selectable<SyncMetadataRow> _metadataQuery(String resourceKey) {
-    return database.select(database.syncMetadataRecords)
-      ..where((row) => row.resourceKey.equals(resourceKey));
-  }
-
-  SyncMetadata _mapMetadata(SyncMetadataRow row) => SyncMetadata(
-    resourceKey: row.resourceKey,
-    nextOffset: row.nextOffset,
-    totalCount: row.totalCount,
-    status: SyncStatus.values.byName(row.status),
-    lastSuccessAt: row.lastSuccessAt?.toUtc(),
-    lastError: row.lastError,
-    isComplete: row.isComplete,
-  );
-
   @override
   Stream<SyncMetadata?> watchSyncMetadata(String resourceKey) =>
-      _metadataQuery(resourceKey)
-          .watchSingleOrNull()
-          .map((row) => row == null ? null : _mapMetadata(row));
+      _metadata.watch(resourceKey);
 
   @override
-  Future<SyncMetadata?> readSyncMetadata(String resourceKey) async {
-    final row = await _metadataQuery(resourceKey).getSingleOrNull();
-    return row == null ? null : _mapMetadata(row);
-  }
+  Future<SyncMetadata?> readSyncMetadata(String resourceKey) =>
+      _metadata.read(resourceKey);
 
   @override
   Future<void> savePage(List<Pokemon> pokemon, SyncMetadata metadata) {
     return database.transaction(() async {
       for (final item in pokemon) {
-        final species = item.species;
-        if (species != null) await _saveSpecies(species);
-        // Actualiza por ID sin borrar la fila referenciada por favoritos.
-        await database
-            .into(database.pokemonRecords)
-            .insertOnConflictUpdate(
-              PokemonRecordsCompanion.insert(
-                id: Value(item.id),
-                nationalNumber: item.nationalNumber,
-                name: item.name,
-                imageUrl: Value(item.imageUrl),
-                updatedAt: item.updatedAt,
-                speciesId: Value(species?.id),
-                height: Value(item.height),
-                weight: Value(item.weight),
-                baseStatTotal: Value(item.baseStatTotal),
-                isDefault: Value(item.isDefault),
-              ),
-            );
-        await _replaceAbilities(item);
-        await (database.delete(
-          database.pokemonTypeLinks,
-        )..where((row) => row.pokemonId.equals(item.id))).go();
-        for (final entry in item.types) {
-          await database
-              .into(database.pokemonTypes)
-              .insertOnConflictUpdate(
-                PokemonTypesCompanion.insert(
-                  id: Value(entry.type.id),
-                  name: entry.type.name,
-                ),
-              );
-          await database
-              .into(database.pokemonTypeLinks)
-              .insert(
-                PokemonTypeLinksCompanion.insert(
-                  pokemonId: item.id,
-                  typeId: entry.type.id,
-                  slot: entry.slot,
-                ),
-              );
-        }
+        await _writer.upsertPokemon(item);
       }
       // El offset solo cambia si se confirma la pagina completa.
-      await database
-          .into(database.syncMetadataRecords)
-          .insertOnConflictUpdate(
-            SyncMetadataRecordsCompanion.insert(
-              resourceKey: metadata.resourceKey,
-              nextOffset: Value(metadata.nextOffset),
-              totalCount: Value(metadata.totalCount),
-              status: Value(metadata.status.name),
-              lastSuccessAt: Value(metadata.lastSuccessAt),
-              lastError: Value(metadata.lastError),
-              isComplete: Value(metadata.isComplete),
-            ),
-          );
+      await _metadata.save(metadata);
     });
-  }
-
-  // Reemplaza los enlaces (restaura alteraciones, OF-19). De `ability` solo se
-  // actualiza el nombre: el efecto lo completa la sync del detalle.
-  Future<void> _replaceAbilities(Pokemon item) async {
-    await (database.delete(
-      database.pokemonAbilities,
-    )..where((row) => row.pokemonId.equals(item.id))).go();
-    for (final entry in item.abilities) {
-      await database
-          .into(database.abilities)
-          .insert(
-            AbilitiesCompanion.insert(
-              id: Value(entry.ability.id),
-              name: entry.ability.name,
-            ),
-            onConflict: DoUpdate(
-              (_) => AbilitiesCompanion(name: Value(entry.ability.name)),
-            ),
-          );
-      await database
-          .into(database.pokemonAbilities)
-          .insert(
-            PokemonAbilitiesCompanion.insert(
-              pokemonId: item.id,
-              abilityId: entry.ability.id,
-              slot: entry.slot,
-              isHidden: Value(entry.isHidden),
-            ),
-          );
-    }
-  }
-
-  // Solo escribe las columnas que trae el catalogo: lo que complete la sync del
-  // detalle (evolution_chain_id...) no se pisa con un upsert parcial.
-  Future<void> _saveSpecies(PokemonSpecies species) async {
-    final generation = species.generation;
-    if (generation != null) {
-      await database
-          .into(database.generations)
-          .insertOnConflictUpdate(
-            GenerationsCompanion.insert(
-              id: Value(generation.id),
-              name: generation.name,
-              regionName: Value(generation.regionName),
-            ),
-          );
-    }
-    await database
-        .into(database.pokemonSpecies)
-        .insertOnConflictUpdate(
-          PokemonSpeciesCompanion.insert(
-            id: Value(species.id),
-            name: species.name,
-            generationId: Value(generation?.id),
-          ),
-        );
   }
 
   @override
@@ -295,24 +183,7 @@ class LocalPokemonRepository implements PokemonRepository {
     String resourceKey,
     SyncStatus status, {
     String? lastError,
-  }) async {
-    // Un error de red no modifica el progreso confirmado ni borra el catalogo.
-    await database
-        .into(database.syncMetadataRecords)
-        .insert(
-          SyncMetadataRecordsCompanion.insert(
-            resourceKey: resourceKey,
-            status: Value(status.name),
-            lastError: Value(lastError),
-          ),
-          onConflict: DoUpdate(
-            (_) => SyncMetadataRecordsCompanion(
-              status: Value(status.name),
-              lastError: Value(lastError),
-            ),
-          ),
-        );
-  }
+  }) => _metadata.updateStatus(resourceKey, status, lastError: lastError);
 }
 
 // El texto del usuario se busca literal: %, _ y \ no actuan como comodines.
