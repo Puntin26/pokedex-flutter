@@ -35,7 +35,9 @@ class PokemonPage extends ConsumerWidget {
                   ],
                 ),
               ),
-            const CatalogFilterBar(),
+            // Aparece cuando la consulta guardada ya se restauro (milisegundos).
+            if (ref.watch(catalogQueryProvider).hasValue)
+              const CatalogFilterBar(),
             if (catalog.isPartial)
               _PartialCatalogNotice(
                 downloaded: catalog.partialDownloaded!,
