@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart' hide isNull, isNotNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pokedex/core/database/app_database.dart';
+import 'package:pokedex/core/domain/sync_activity.dart';
 import 'package:pokedex/core/domain/sync_failure.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
+import 'package:pokedex/core/sync/retry_policy.dart';
 import 'package:pokedex/features/favorites/data/local_favorites_repository.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_sync_coordinator.dart';
@@ -385,4 +388,246 @@ void main() {
       }
     },
   );
+
+  test('Reintenta con backoff una pagina con fallo temporal sin repetir las guardadas', () async {
+    final waits = <Duration>[];
+    final logs = <String>[];
+    final original = remote.respond;
+    var failures = 2;
+    remote.respond = (limit, offset) async {
+      if (offset == 2 && failures-- > 0) {
+        throw const SyncFailure(SyncFailureKind.serviceUnavailable, '503');
+      }
+      return original(limit, offset);
+    };
+    sync = PokemonSyncCoordinator(
+      remote: remote,
+      local: local,
+      pageSize: 2,
+      retryPolicy: RetryPolicy(
+        wait: (delay) async => waits.add(delay),
+        maxJitter: Duration.zero,
+        log: logs.add,
+      ),
+    );
+
+    await sync.synchronize();
+
+    expect(remote.offsets, [0, 2, 2, 2, 4]);
+    expect(waits, [const Duration(seconds: 2), const Duration(seconds: 4)]);
+    expect(logs, hasLength(2));
+    expect(await local.watchCatalog().first, hasLength(5));
+    final metadata = (await local.readSyncMetadata(resource))!;
+    expect(metadata.status, SyncStatus.success);
+    expect(metadata.lastError, isNull);
+  });
+
+  test(
+    'Reintentos agotados marcan failed y conservan las paginas guardadas',
+    () async {
+      final original = remote.respond;
+      remote.respond = (limit, offset) async {
+        if (offset == 2) {
+          throw const SyncFailure(SyncFailureKind.timeout, 'sin respuesta');
+        }
+        return original(limit, offset);
+      };
+      sync = PokemonSyncCoordinator(
+        remote: remote,
+        local: local,
+        pageSize: 2,
+        retryPolicy: RetryPolicy(
+          maxRetries: 2,
+          wait: (_) async {},
+          log: (_) {},
+        ),
+      );
+
+      await expectLater(sync.synchronize(), throwsA(isA<SyncFailure>()));
+
+      expect(remote.offsets, [0, 2, 2, 2]);
+      expect(await local.watchCatalog().first, hasLength(2));
+      final metadata = (await local.readSyncMetadata(resource))!;
+      expect(metadata.status, SyncStatus.failed);
+      expect(metadata.nextOffset, 2);
+      expect(metadata.lastError, contains('timeout'));
+    },
+  );
+
+  group('Actividad de sincronizacion (1.2)', () {
+    Future<List<SyncActivity>> record(Future<void> Function() action) async {
+      final events = <SyncActivity>[];
+      final subscription = sync.watchActivity().listen(events.add);
+      try {
+        await action();
+      } on SyncFailure {
+        // El fallo es parte del escenario; se revisa con los eventos.
+      }
+      await pumpEventQueue();
+      await subscription.cancel();
+      return events;
+    }
+
+    test('Empieza idle y vuelve a idle tras una sync exitosa', () async {
+      expect(sync.activity, SyncActivity.idle);
+      final events = await record(sync.synchronize);
+      expect(events.first, SyncActivity.idle);
+      expect(events, containsAllInOrder([SyncActivity.syncing]));
+      expect(events.last, SyncActivity.idle);
+      expect(events, isNot(contains(SyncActivity.waitingRetry)));
+      expect(sync.activity, SyncActivity.idle);
+    });
+
+    test('Pasa por waitingRetry durante el backoff y luego syncing', () async {
+      final original = remote.respond;
+      var failures = 1;
+      remote.respond = (limit, offset) async {
+        if (offset == 2 && failures-- > 0) {
+          throw const SyncFailure(SyncFailureKind.timeout, 'lento');
+        }
+        return original(limit, offset);
+      };
+      final seenWhileWaiting = <SyncActivity>[];
+      sync = PokemonSyncCoordinator(
+        remote: remote,
+        local: local,
+        pageSize: 2,
+        retryPolicy: RetryPolicy(
+          wait: (_) async => seenWhileWaiting.add(sync.activity),
+          log: (_) {},
+        ),
+      );
+
+      final events = await record(sync.synchronize);
+
+      expect(seenWhileWaiting, [SyncActivity.waitingRetry]);
+      expect(
+        events,
+        containsAllInOrder([
+          SyncActivity.syncing,
+          SyncActivity.waitingRetry,
+          SyncActivity.syncing,
+          SyncActivity.idle,
+        ]),
+      );
+    });
+
+    test('Queda failed si se rinde y se limpia en la siguiente sync', () async {
+      final original = remote.respond;
+      remote.respond = (limit, offset) async =>
+          throw const SyncFailure(SyncFailureKind.invalidResponse, 'malo');
+
+      final failedEvents = await record(sync.synchronize);
+      expect(failedEvents.last, SyncActivity.failed);
+      expect(sync.activity, SyncActivity.failed);
+
+      remote.respond = original;
+      final events = await record(() => sync.synchronize(restart: true));
+      expect(events.first, SyncActivity.failed);
+      expect(events.last, SyncActivity.idle);
+    });
+
+    test('El fallo de almacenamiento tambien deja failed', () async {
+      final failing = FailingLocal(database);
+      sync = PokemonSyncCoordinator(remote: remote, local: failing);
+      await record(sync.synchronize);
+      expect(sync.activity, SyncActivity.failed);
+    });
+  });
+
+  group('Vigencia y restauracion del catalogo (1.4)', () {
+    test(
+      'OF-19: una sync restaura nombre, imagen y tipos alterados localmente',
+      () async {
+        final favorites = LocalFavoritesRepository(database);
+        await sync.synchronize();
+        final original = await local.watchCatalog().first;
+        await favorites.addFavorite(1, DateTime.utc(2026));
+
+        // Simula la edicion manual de PA-16 con un inspector de base de datos.
+        await (database.update(
+          database.pokemonRecords,
+        )..where((row) => row.id.equals(1))).write(
+          const PokemonRecordsCompanion(
+            name: Value('alterado'),
+            imageUrl: Value('https://falso/1.png'),
+          ),
+        );
+        await (database.delete(
+          database.pokemonTypeLinks,
+        )..where((row) => row.pokemonId.equals(2))).go();
+        final firstType = original.first.types.first.type;
+        await (database.update(database.pokemonTypes)
+              ..where((row) => row.id.equals(firstType.id)))
+            .write(const PokemonTypesCompanion(name: Value('tipo-falso')));
+        await (database.delete(
+          database.pokemonRecords,
+        )..where((row) => row.id.equals(5))).go();
+
+        await sync.synchronize();
+
+        final restored = await local.watchCatalog().first;
+        expect(
+          restored.map((p) => (p.id, p.name, p.imageUrl)),
+          original.map((p) => (p.id, p.name, p.imageUrl)),
+        );
+        expect(
+          restored.map((p) => p.types.map((t) => (t.slot, t.type.name))),
+          original.map((p) => p.types.map((t) => (t.slot, t.type.name))),
+        );
+        expect(await favorites.watchFavorites().first, hasLength(1));
+      },
+    );
+
+    test(
+      'Re-sync de un catalogo completo no lo marca parcial ni cambia la fecha '
+      'hasta terminar',
+      () async {
+        await sync.synchronize();
+        final before = (await local.readSyncMetadata(resource))!;
+        expect(before.isComplete, isTrue);
+
+        final original = remote.respond;
+        remote.respond = (limit, offset) async {
+          if (offset == 2) {
+            throw const SyncFailure(SyncFailureKind.network, 'sin red');
+          }
+          return original(limit, offset);
+        };
+        await expectLater(sync.synchronize(), throwsA(isA<SyncFailure>()));
+
+        final interrupted = (await local.readSyncMetadata(resource))!;
+        expect(interrupted.isComplete, isTrue);
+        expect(interrupted.nextOffset, 2);
+        expect(interrupted.lastSuccessAt, before.lastSuccessAt);
+        expect(interrupted.status, SyncStatus.failed);
+
+        // Reanuda la actualizacion interrumpida y al terminar renueva la fecha.
+        remote.respond = original;
+        remote.offsets.clear();
+        final later = before.lastSuccessAt!.add(const Duration(hours: 1));
+        await PokemonSyncCoordinator(
+          remote: remote,
+          local: local,
+          pageSize: 2,
+          clock: () => later,
+        ).synchronize();
+        expect(remote.offsets, [2, 4]);
+        final after = (await local.readSyncMetadata(resource))!;
+        expect(after.isComplete, isTrue);
+        expect(after.nextOffset, 5);
+        expect(after.lastSuccessAt, later);
+      },
+    );
+
+    test(
+      'Tras completar, la siguiente sync vuelve a empezar en cero',
+      () async {
+        await sync.synchronize();
+        remote.offsets.clear();
+        await sync.synchronize();
+        expect(remote.offsets, [0, 2, 4]);
+      },
+    );
+  });
 }

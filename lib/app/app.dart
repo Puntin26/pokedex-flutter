@@ -1,13 +1,17 @@
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
-import '../core/connectivity/connection_indicator.dart';
+import 'connection_indicator.dart';
 import '../features/pokemon/presentation/pokemon_page.dart';
+import 'sync_scheduler_provider.dart';
 
-class PokedexApp extends StatelessWidget {
+class PokedexApp extends ConsumerWidget {
   const PokedexApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Mantiene activa la sync automatica (reconexion y periodica) en toda la app.
+    ref.watch(syncSchedulerProvider);
     return MaterialApp(
       title: 'Pokedex',
       debugShowCheckedModeBanner: false,
