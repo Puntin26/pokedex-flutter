@@ -1,5 +1,6 @@
 import '../../../core/domain/sync_failure.dart';
 import '../../../core/domain/sync_metadata.dart';
+import '../../../core/sync/retry_policy.dart';
 import '../domain/pokemon_repository.dart';
 import '../domain/pokemon_sync.dart';
 import 'pokemon_page_dto.dart';
@@ -10,7 +11,8 @@ class PokemonSyncCoordinator implements PokemonSync {
     required this.remote,
     required this.local,
     this.pageSize = 100,
-  }) {
+    RetryPolicy? retryPolicy,
+  }) : retryPolicy = retryPolicy ?? RetryPolicy.none() {
     if (pageSize < 1 || pageSize > 100) {
       throw ArgumentError.value(
         pageSize,
@@ -24,6 +26,7 @@ class PokemonSyncCoordinator implements PokemonSync {
   final RemotePokemonSource remote;
   final PokemonRepository local;
   final int pageSize;
+  final RetryPolicy retryPolicy;
   Future<void>? _activeSync;
 
   @override
@@ -42,7 +45,12 @@ class PokemonSyncCoordinator implements PokemonSync {
       await local.updateSyncStatus(resourceKey, SyncStatus.syncing);
 
       while (true) {
-        final data = await remote.fetchPage(limit: pageSize, offset: offset);
+        // Se reintenta solo la pagina actual: las ya guardadas no se repiten.
+        final pageOffset = offset;
+        final data = await retryPolicy.run(
+          () => remote.fetchPage(limit: pageSize, offset: pageOffset),
+          label: 'catalogo offset $pageOffset',
+        );
         final page = PokemonPageDto.fromJson(
           data,
           limit: pageSize,
