@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/database/app_database.dart';
+import '../core/domain/sync_activity.dart';
 import '../core/network/pokeapi_graphql_client.dart';
 import '../core/sync/retry_policy.dart';
 import '../features/pokemon/data/local_pokemon_repository.dart';
@@ -29,9 +30,16 @@ final pokemonRepositoryProvider = Provider<PokemonRepository>((ref) {
 });
 
 final pokemonSyncProvider = Provider<PokemonSync>((ref) {
-  return PokemonSyncCoordinator(
+  final coordinator = PokemonSyncCoordinator(
     remote: GraphqlPokemonSource(ref.watch(pokeApiClientProvider)),
     local: ref.watch(pokemonRepositoryProvider),
     retryPolicy: RetryPolicy(),
   );
+  ref.onDispose(() => unawaited(coordinator.dispose()));
+  return coordinator;
 });
+
+// Actividad de sync del catalogo; la consume el indicador global (tarea 1.5).
+final catalogSyncActivityProvider = StreamProvider<SyncActivity>(
+  (ref) => ref.watch(pokemonSyncProvider).watchActivity(),
+);

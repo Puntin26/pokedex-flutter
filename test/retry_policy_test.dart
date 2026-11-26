@@ -140,4 +140,23 @@ void main() {
   test('Rechaza configuraciones invalidas', () {
     expect(() => RetryPolicy(maxRetries: -1), throwsArgumentError);
   });
+
+  test('Avisa con onRetry antes de cada espera', () async {
+    final notified = <Duration>[];
+    var calls = 0;
+    await policy().run(
+      () async {
+        if (calls++ < 2) {
+          // onRetry ya se llamo antes de esta espera.
+          expect(notified.length, waits.length);
+          throw const SyncFailure(SyncFailureKind.network, 'sin red');
+        }
+      },
+      onRetry: (delay) {
+        notified.add(delay);
+        expect(waits.length, notified.length - 1);
+      },
+    );
+    expect(notified, waits);
+  });
 }

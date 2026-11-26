@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import '../../../core/domain/sync_activity.dart';
 import '../../../core/domain/sync_failure.dart';
 import '../../../core/domain/sync_metadata.dart';
 import '../../../core/sync/retry_policy.dart';
@@ -28,6 +31,30 @@ class PokemonSyncCoordinator implements PokemonSync {
   final int pageSize;
   final RetryPolicy retryPolicy;
   Future<void>? _activeSync;
+  SyncActivity _activity = SyncActivity.idle;
+  final _activityChanges = StreamController<SyncActivity>.broadcast(sync: true);
+
+  @override
+  SyncActivity get activity => _activity;
+
+  @override
+  Stream<SyncActivity> watchActivity() {
+    // Stream.multi se suscribe de forma sincrona: no se pierde un cambio entre
+    // el valor inicial y la suscripcion.
+    return Stream.multi((listener) {
+      listener.add(_activity);
+      final subscription = _activityChanges.stream.listen(listener.add);
+      listener.onCancel = subscription.cancel;
+    });
+  }
+
+  Future<void> dispose() => _activityChanges.close();
+
+  void _setActivity(SyncActivity activity) {
+    if (activity == _activity || _activityChanges.isClosed) return;
+    _activity = activity;
+    _activityChanges.add(activity);
+  }
 
   @override
   Future<void> synchronize({bool restart = false}) {
@@ -36,6 +63,7 @@ class PokemonSyncCoordinator implements PokemonSync {
   }
 
   Future<void> _synchronize({required bool restart}) async {
+    _setActivity(SyncActivity.syncing);
     try {
       final previous = await local.readSyncMetadata(resourceKey);
       final resume = !restart && previous != null && !previous.isComplete;
@@ -48,8 +76,12 @@ class PokemonSyncCoordinator implements PokemonSync {
         // Se reintenta solo la pagina actual: las ya guardadas no se repiten.
         final pageOffset = offset;
         final data = await retryPolicy.run(
-          () => remote.fetchPage(limit: pageSize, offset: pageOffset),
+          () {
+            _setActivity(SyncActivity.syncing);
+            return remote.fetchPage(limit: pageSize, offset: pageOffset);
+          },
           label: 'catalogo offset $pageOffset',
+          onRetry: (_) => _setActivity(SyncActivity.waitingRetry),
         );
         final page = PokemonPageDto.fromJson(
           data,
@@ -80,12 +112,16 @@ class PokemonSyncCoordinator implements PokemonSync {
             isComplete: complete,
           ),
         );
-        if (complete) return;
+        if (complete) {
+          _setActivity(SyncActivity.idle);
+          return;
+        }
         offset = nextOffset;
         expectedTotal = page.totalCount;
         previousId = pokemon.last.id;
       }
     } catch (error, stackTrace) {
+      _setActivity(SyncActivity.failed);
       final failure = error is SyncFailure
           ? error
           : const SyncFailure(
