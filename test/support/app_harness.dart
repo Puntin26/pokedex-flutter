@@ -12,7 +12,10 @@ import 'package:pokedex/core/domain/sync_activity.dart';
 import 'package:pokedex/core/domain/sync_metadata.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/domain/pokemon.dart';
+import 'package:pokedex/features/pokemon/domain/pokemon_detail_sync.dart';
 import 'package:pokedex/features/pokemon/domain/pokemon_sync.dart';
+
+import 'fake_detail_source.dart';
 
 class IdleSync implements PokemonSync {
   @override
@@ -33,7 +36,8 @@ Pokemon samplePokemon(int id, String name) => Pokemon(
   ],
 );
 
-/// App completa sobre SQLite en memoria, sin red (modo avion) y sin sync real.
+/// App completa sobre SQLite en memoria, sin red (modo avion por defecto) y
+/// sin sync real.
 class AppHarness {
   AppHarness() : database = AppDatabase(NativeDatabase.memory());
 
@@ -70,9 +74,12 @@ class AppHarness {
     WidgetTester tester, {
     List<Override> overrides = const [],
     double width = 800,
+    double height = 1400,
     double textScale = 1,
+    bool online = false,
+    PokemonDetailSync? detailSync,
   }) async {
-    tester.view.physicalSize = Size(width, 1400);
+    tester.view.physicalSize = Size(width, height);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     addTearDown(dispose);
@@ -83,10 +90,13 @@ class AppHarness {
         pokemonSyncProvider.overrideWithValue(IdleSync()),
         connectionMonitorProvider.overrideWithValue(
           ConnectionMonitor(
-            hasNetwork: () async => false,
+            hasNetwork: () async => online,
             networkChanges: const Stream.empty(),
-            isServiceAvailable: () async => false,
+            isServiceAvailable: () async => online,
           ),
+        ),
+        pokemonDetailSyncProvider.overrideWithValue(
+          detailSync ?? NoNetworkDetailSync(),
         ),
         ...overrides,
       ],

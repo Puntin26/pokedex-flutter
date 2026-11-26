@@ -26,6 +26,7 @@ La primera instalacion requiere Internet para descargar dependencias. Si se camb
 - Drift y drift_flutter: SQLite con relaciones, transacciones y consultas que emiten cambios.
 - graphql: ejecuta consultas remotas sin conectar los widgets directamente a GraphQL.
 - connectivity_plus: detecta cambios de red, se complementa con una consulta al servicio.
+- share_plus: abre la hoja de compartir del sistema desde el detalle (RF-DET-10). Se eligio porque es el plugin oficial de la comunidad Flutter (Flutter Favorite) para Android e iOS; implementarlo a mano exigiria codigo nativo por plataforma.
 - drift_dev y build_runner: generan el codigo de la base. flutter_test y flutter_lints: pruebas y analisis.
 
 Las versiones estan fijadas en `pubspec.lock`.

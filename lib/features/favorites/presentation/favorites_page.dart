@@ -3,6 +3,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../../app/home_shell.dart';
 import '../../pokemon/presentation/pokemon_card.dart';
+import '../../pokemon/presentation/pokemon_detail_page.dart';
 import '../domain/favorite.dart';
 import 'favorite_button.dart';
 import 'favorites_providers.dart';
@@ -32,9 +33,18 @@ class FavoritesPageBody extends ConsumerWidget {
         itemCount: value.length,
         itemBuilder: (_, index) {
           final favorite = value[index];
+          final heroTag = 'favorite-${favorite.pokemon.id}';
           return PokemonCard(
             key: ValueKey(favorite.pokemon.id),
             pokemon: favorite.pokemon,
+            heroTag: heroTag,
+            onTap: () => Navigator.of(context).push(
+              pokemonDetailRoute(
+                favorite.pokemon.id,
+                heroTag: heroTag,
+                action: (pokemon) => FavoriteButton(pokemon: pokemon),
+              ),
+            ),
             trailing: FavoriteButton(
               pokemon: favorite.pokemon,
               onRemoved: () => _offerUndo(context, ref, favorite),
