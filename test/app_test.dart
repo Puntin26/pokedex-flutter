@@ -325,9 +325,16 @@ void main() {
     await pumpUntil(
       tester,
       () =>
-          find.text('pokemon-3').evaluate().isNotEmpty &&
+          container!.read(localCatalogProvider).value?.length == 3 &&
           !container!.read(pokemonCatalogStateProvider).isSyncing,
     );
+    // La barra inferior deja el tercero bajo el borde: se desplaza hasta el.
+    await tester.scrollUntilVisible(
+      find.text('pokemon-3'),
+      200,
+      scrollable: catalogList,
+    );
+    expect(find.text('pokemon-3'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

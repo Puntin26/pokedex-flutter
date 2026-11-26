@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'connection_indicator.dart';
-import '../features/pokemon/presentation/pokemon_page.dart';
+import 'home_shell.dart';
 import 'sync_scheduler_provider.dart';
 
 class PokedexApp extends ConsumerWidget {
@@ -24,7 +24,7 @@ class PokedexApp extends ConsumerWidget {
           ],
         ),
       ),
-      home: const PokemonPage(),
+      home: const HomeShell(),
     );
   }
 }

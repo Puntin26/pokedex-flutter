@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
+import '../domain/pokemon.dart';
 import 'catalog_filter_bar.dart';
 import 'catalog_query_controller.dart';
 import 'pokemon_catalog_controller.dart';
@@ -8,7 +9,10 @@ import 'pokemon_catalog_state.dart';
 import 'pokemon_card.dart';
 
 class PokemonPage extends ConsumerWidget {
-  const PokemonPage({super.key});
+  const PokemonPage({super.key, this.cardTrailing});
+
+  /// Accion por tarjeta que compone la app (el corazon de favoritos).
+  final Widget Function(Pokemon pokemon)? cardTrailing;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -116,7 +120,11 @@ class PokemonPage extends ConsumerWidget {
           itemCount: catalog.pokemon.length,
           itemBuilder: (context, index) {
             final pokemon = catalog.pokemon[index];
-            return PokemonCard(key: ValueKey(pokemon.id), pokemon: pokemon);
+            return PokemonCard(
+              key: ValueKey(pokemon.id),
+              pokemon: pokemon,
+              trailing: cardTrailing?.call(pokemon),
+            );
           },
         );
     }
