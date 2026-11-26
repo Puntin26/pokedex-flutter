@@ -53,6 +53,7 @@ List<Pokemon> mapPokemonRows(List<TypedResult> rows, AppDatabase database) {
       weight: row.weight,
       baseStatTotal: row.baseStatTotal,
       isDefault: row.isDefault,
+      shinyImageUrl: row.shinyImageUrl,
     );
   }).toList();
 }
