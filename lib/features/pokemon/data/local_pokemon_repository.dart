@@ -16,10 +16,17 @@ class LocalPokemonRepository implements PokemonRepository {
     final pokemon = database.pokemonRecords;
     final links = database.pokemonTypeLinks;
     final types = database.pokemonTypes;
+    final species = database.pokemonSpecies;
+    final generations = database.generations;
     final query =
         database.select(pokemon).join([
           leftOuterJoin(links, links.pokemonId.equalsExp(pokemon.id)),
           leftOuterJoin(types, types.id.equalsExp(links.typeId)),
+          leftOuterJoin(species, species.id.equalsExp(pokemon.speciesId)),
+          leftOuterJoin(
+            generations,
+            generations.id.equalsExp(species.generationId),
+          ),
         ])..orderBy([
           OrderingTerm.asc(pokemon.nationalNumber),
           OrderingTerm.asc(pokemon.id),
@@ -69,6 +76,8 @@ class LocalPokemonRepository implements PokemonRepository {
   Future<void> savePage(List<Pokemon> pokemon, SyncMetadata metadata) {
     return database.transaction(() async {
       for (final item in pokemon) {
+        final species = item.species;
+        if (species != null) await _saveSpecies(species);
         // Actualiza por ID sin borrar la fila referenciada por favoritos.
         await database
             .into(database.pokemonRecords)
@@ -79,6 +88,11 @@ class LocalPokemonRepository implements PokemonRepository {
                 name: item.name,
                 imageUrl: Value(item.imageUrl),
                 updatedAt: item.updatedAt,
+                speciesId: Value(species?.id),
+                height: Value(item.height),
+                weight: Value(item.weight),
+                baseStatTotal: Value(item.baseStatTotal),
+                isDefault: Value(item.isDefault),
               ),
             );
         await (database.delete(
@@ -119,6 +133,32 @@ class LocalPokemonRepository implements PokemonRepository {
             ),
           );
     });
+  }
+
+  // Solo escribe las columnas que trae el catalogo: lo que complete la sync del
+  // detalle (evolution_chain_id...) no se pisa con un upsert parcial.
+  Future<void> _saveSpecies(PokemonSpecies species) async {
+    final generation = species.generation;
+    if (generation != null) {
+      await database
+          .into(database.generations)
+          .insertOnConflictUpdate(
+            GenerationsCompanion.insert(
+              id: Value(generation.id),
+              name: generation.name,
+              regionName: Value(generation.regionName),
+            ),
+          );
+    }
+    await database
+        .into(database.pokemonSpecies)
+        .insertOnConflictUpdate(
+          PokemonSpeciesCompanion.insert(
+            id: Value(species.id),
+            name: species.name,
+            generationId: Value(generation?.id),
+          ),
+        );
   }
 
   @override

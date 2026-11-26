@@ -29,6 +29,58 @@ void main() {
     expect(result.updatedAt.isUtc, isTrue);
   });
 
+  test('Mapea especie, generacion, region, medidas y total de stats (2.3)', () {
+    final row = catalogRow(
+      10091,
+      nationalNumber: 19,
+      name: 'rattata-alola',
+      isDefault: false,
+      baseStatTotal: 253,
+    );
+    final result = PokemonPageDto.fromJson(
+      catalogResponse([row], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single;
+    expect(result.isDefault, isFalse);
+    expect(result.height, 7);
+    expect(result.weight, 69);
+    expect(result.baseStatTotal, 253);
+    expect(result.species!.id, 19);
+    expect(result.species!.name, 'species-19');
+    expect(result.species!.generation!.id, 1);
+    expect(result.species!.generation!.name, 'generation-i');
+    expect(result.species!.generation!.regionName, 'kanto');
+  });
+
+  test('Acepta nulos donde el esquema los permite', () {
+    final row = catalogRow(1)
+      ..['height'] = null
+      ..['weight'] = null;
+    (row['pokemonspecy'] as Map)['generation'] = null;
+    ((row['pokemonstats_aggregate'] as Map)['aggregate'] as Map)['sum'] = {
+      'base_stat': null,
+    };
+    final result = PokemonPageDto.fromJson(
+      catalogResponse([row], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single;
+    expect(result.height, isNull);
+    expect(result.weight, isNull);
+    expect(result.baseStatTotal, isNull);
+    expect(result.species!.generation, isNull);
+
+    final noRegion = catalogRow(2);
+    ((noRegion['pokemonspecy'] as Map)['generation'] as Map)['region'] = null;
+    final generation = PokemonPageDto.fromJson(
+      catalogResponse([noRegion], total: 1),
+      limit: 2,
+      offset: 0,
+    ).toDomain(DateTime.utc(2026)).single.species!.generation!;
+    expect(generation.regionName, isNull);
+  });
+
   test('Usa sprite si falta artwork y admite ausencia real de imagen', () {
     for (final sprites in [
       [
@@ -72,6 +124,20 @@ void main() {
         (row['pokemonsprites'] as List).first.remove('artwork'),
     'imagen invalida': (row) =>
         (row['pokemonsprites'] as List).first['front'] = 'invalid',
+    'especie ausente': (row) => row.remove('pokemonspecy'),
+    'especie distinta al numero': (row) =>
+        (row['pokemonspecy'] as Map)['id'] = 99,
+    'especie sin nombre': (row) => (row['pokemonspecy'] as Map)['name'] = '',
+    'generacion parcial': (row) =>
+        ((row['pokemonspecy'] as Map)['generation'] as Map).remove('name'),
+    'is_default no booleano': (row) => row['is_default'] = 1,
+    'altura negativa': (row) => row['height'] = -1,
+    'peso no entero': (row) => row['weight'] = 6.9,
+    'stats sin agregado': (row) => row.remove('pokemonstats_aggregate'),
+    'total negativo': (row) =>
+        ((row['pokemonstats_aggregate'] as Map)['aggregate'] as Map)['sum'] = {
+          'base_stat': -5,
+        },
   };
   for (final entry in invalidRows.entries) {
     test('Rechaza ${entry.key}', () {

@@ -58,6 +58,17 @@ void main() {
     expect(methods, ['POST', 'POST']);
     expect(requests.first['variables'], {'limit': 2, 'offset': 0});
     expect(requests.first['query'], contains('order_by: {id: asc}'));
+    // 2.3: especie con generacion/region y total de stats agregado en el servidor.
+    for (final field in [
+      'is_default',
+      'height',
+      'weight',
+      'pokemonspecy',
+      'region',
+      'pokemonstats_aggregate',
+    ]) {
+      expect(requests.first['query'], contains(field));
+    }
     expect(requests.first['query'], contains('pokemon_species_id'));
     expect(
       requests.first['query'],

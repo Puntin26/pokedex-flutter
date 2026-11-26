@@ -53,6 +53,13 @@ void main() {
       'poison',
     ]);
     expect(catalog.first.imageUrl, startsWith('https://'));
+    // 2.3: especie, generacion/region y total de stats llegan de la API real.
+    expect(catalog.first.baseStatTotal, 318);
+    expect(catalog.first.isDefault, isTrue);
+    expect(catalog.first.height, 7);
+    expect(catalog.first.species!.id, 1);
+    expect(catalog.first.species!.generation!.id, 1);
+    expect(catalog.first.species!.generation!.regionName, 'kanto');
     await favorites.addFavorite(catalog.first.id, DateTime.utc(2026));
     final metadata = (await local.readSyncMetadata(resource))!;
     await local.savePage(firstPage!.toDomain(DateTime.now().toUtc()), metadata);
