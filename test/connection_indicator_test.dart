@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:pokedex/app/api_outage_simulation.dart';
 import 'package:pokedex/app/clock_provider.dart';
 import 'package:pokedex/app/connection_indicator.dart';
 import 'package:pokedex/app/connection_status_provider.dart';
@@ -21,6 +22,12 @@ class ManualStatus extends ConnectionStatusController {
   ConnectionStatus build() => initial;
 
   void set(ConnectionStatus status) => state = status;
+}
+
+// Solo cambia el valor; los efectos de toggle se prueban en api_outage_simulation_test.
+class FakeOutage extends ApiOutageSimulation {
+  @override
+  void toggle() => state = !state;
 }
 
 final now = DateTime(2026, 11, 26, 15);
@@ -60,6 +67,7 @@ void main() {
           catalogMetadataProvider.overrideWith((ref) => Stream.value(metadata)),
           catalogSyncActivityProvider.overrideWith((ref) => activity.stream),
           clockProvider.overrideWithValue(() => now),
+          apiOutageSimulationProvider.overrideWith(FakeOutage.new),
         ],
         child: MaterialApp(
           home: MediaQuery(
@@ -198,5 +206,22 @@ void main() {
     await emitActivity(tester, SyncActivity.waitingRetry);
     expect(tester.takeException(), isNull);
     expect(find.text('Reintentando'), findsOneWidget);
+  });
+
+  testWidgets('Pulsacion larga activa y apaga la simulacion de API caida', (
+    tester,
+  ) async {
+    await mount(tester);
+    expect(find.text('Simulacion: API caida'), findsNothing);
+    await tester.longPress(find.byType(ConnectionIndicator));
+    await tester.pump();
+    expect(find.text('Simulacion: API caida'), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'Simulacion: API caida$')),
+      findsOneWidget,
+    );
+    await tester.longPress(find.byType(ConnectionIndicator));
+    await tester.pump();
+    expect(find.text('Simulacion: API caida'), findsNothing);
   });
 }

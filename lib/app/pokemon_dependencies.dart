@@ -11,6 +11,7 @@ import '../features/pokemon/data/pokemon_sync_coordinator.dart';
 import '../features/pokemon/data/remote_pokemon_source.dart';
 import '../features/pokemon/domain/pokemon_repository.dart';
 import '../features/pokemon/domain/pokemon_sync.dart';
+import 'api_outage_simulation.dart';
 
 // Estas instancias viven en el ProviderScope, no en cada widget.
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
@@ -20,7 +21,9 @@ final appDatabaseProvider = Provider<AppDatabase>((ref) {
 });
 
 final pokeApiClientProvider = Provider((ref) {
-  final client = createPokeApiClient();
+  final client = createPokeApiClient(
+    simulateOutage: () => ref.read(apiOutageSimulationProvider),
+  );
   ref.onDispose(client.link.dispose);
   return client;
 });
