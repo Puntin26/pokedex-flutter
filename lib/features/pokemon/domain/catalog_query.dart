@@ -11,6 +11,7 @@ class CatalogQuery {
     this.search = '',
     this.typeId,
     this.generationId,
+    this.abilityId,
     this.sort = CatalogSort.number,
     this.descending = false,
   });
@@ -18,6 +19,7 @@ class CatalogQuery {
   final String search;
   final int? typeId;
   final int? generationId;
+  final int? abilityId;
   final CatalogSort sort;
   final bool descending;
 
@@ -26,13 +28,17 @@ class CatalogQuery {
       search.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '-');
 
   bool get isFiltered =>
-      normalizedSearch.isNotEmpty || typeId != null || generationId != null;
+      normalizedSearch.isNotEmpty ||
+      typeId != null ||
+      generationId != null ||
+      abilityId != null;
 
   // _keep distingue "no cambiar" de "quitar el filtro" (null).
   CatalogQuery copyWith({
     String? search,
     Object? typeId = _keep,
     Object? generationId = _keep,
+    Object? abilityId = _keep,
     CatalogSort? sort,
     bool? descending,
   }) => CatalogQuery(
@@ -41,6 +47,7 @@ class CatalogQuery {
     generationId: identical(generationId, _keep)
         ? this.generationId
         : generationId as int?,
+    abilityId: identical(abilityId, _keep) ? this.abilityId : abilityId as int?,
     sort: sort ?? this.sort,
     descending: descending ?? this.descending,
   );
@@ -50,6 +57,7 @@ class CatalogQuery {
     'search': search,
     'typeId': typeId,
     'generationId': generationId,
+    'abilityId': abilityId,
     'sort': sort.name,
     'descending': descending,
   });
@@ -72,6 +80,7 @@ class CatalogQuery {
       search: search is String ? search : '',
       typeId: positiveId(data['typeId']),
       generationId: positiveId(data['generationId']),
+      abilityId: positiveId(data['abilityId']),
       sort: CatalogSort.values.asNameMap()[data['sort']] ?? CatalogSort.number,
       descending: descending is bool && descending,
     );
@@ -83,10 +92,11 @@ class CatalogQuery {
       other.search == search &&
       other.typeId == typeId &&
       other.generationId == generationId &&
+      other.abilityId == abilityId &&
       other.sort == sort &&
       other.descending == descending;
 
   @override
   int get hashCode =>
-      Object.hash(search, typeId, generationId, sort, descending);
+      Object.hash(search, typeId, generationId, abilityId, sort, descending);
 }

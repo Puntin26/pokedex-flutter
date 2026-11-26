@@ -45,6 +45,7 @@ class PokemonDto {
     required this.weight,
     required this.baseStatTotal,
     required this.isDefault,
+    required this.abilities,
   });
 
   final int id;
@@ -57,6 +58,7 @@ class PokemonDto {
   final int? weight;
   final int? baseStatTotal;
   final bool isDefault;
+  final List<PokemonAbility> abilities;
 
   factory PokemonDto.fromJson(Map<String, dynamic> row) {
     final id = _positiveInt(row['id']);
@@ -118,6 +120,7 @@ class PokemonDto {
       // Nulo si PokeAPI no tiene stats para esa forma.
       baseStatTotal: _optionalNonNegativeInt(statSum['base_stat']),
       isDefault: isDefault,
+      abilities: _abilities(row['pokemonabilities']),
     );
   }
 
@@ -133,7 +136,33 @@ class PokemonDto {
     weight: weight,
     baseStatTotal: baseStatTotal,
     isDefault: isDefault,
+    abilities: abilities,
   );
+}
+
+// Puede venir vacia (hay Pokemon sin habilidades); slots 1-3 sin repetir.
+List<PokemonAbility> _abilities(Object? value) {
+  final abilities = _list(value).map((entry) {
+    final row = _object(entry);
+    final ability = _object(row['ability']);
+    final slot = _positiveInt(row['slot']);
+    final isHidden = row['is_hidden'];
+    if (slot > 3 || isHidden is! bool) _invalid();
+    return PokemonAbility(
+      ability: Ability(
+        id: _positiveInt(ability['id']),
+        name: _name(ability['name']),
+      ),
+      slot: slot,
+      isHidden: isHidden,
+    );
+  }).toList()..sort((a, b) => a.slot.compareTo(b.slot));
+  final slots = abilities.map((entry) => entry.slot).toSet();
+  final ids = abilities.map((entry) => entry.ability.id).toSet();
+  if (slots.length != abilities.length || ids.length != abilities.length) {
+    _invalid();
+  }
+  return List.unmodifiable(abilities);
 }
 
 PokemonSpecies _species(Object? value) {

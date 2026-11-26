@@ -51,6 +51,22 @@ class LocalPokemonRepository implements PokemonRepository {
         ),
       );
     }
+    final abilityId = query.abilityId;
+    if (abilityId != null) {
+      final filter = database.alias(
+        database.pokemonAbilities,
+        'ability_filter',
+      );
+      select.where(
+        existsQuery(
+          database.select(filter)..where(
+            (row) =>
+                row.pokemonId.equalsExp(pokemon.id) &
+                row.abilityId.equals(abilityId),
+          ),
+        ),
+      );
+    }
     final generationId = query.generationId;
     if (generationId != null) {
       select.where(species.generationId.equals(generationId));
@@ -76,6 +92,27 @@ class LocalPokemonRepository implements PokemonRepository {
       OrderingTerm.asc(links.slot),
     ]);
     return select.watch().map((rows) => mapPokemonRows(rows, database));
+  }
+
+  // Solo las habilidades que tiene algun Pokemon guardado, por nombre.
+  @override
+  Stream<List<Ability>> watchAbilities() {
+    final abilities = database.abilities;
+    final links = database.pokemonAbilities;
+    final query = database.selectOnly(abilities, distinct: true)
+      ..addColumns([abilities.id, abilities.name])
+      ..join([innerJoin(links, links.abilityId.equalsExp(abilities.id))])
+      ..orderBy([OrderingTerm.asc(abilities.name)]);
+    return query.watch().map(
+      (rows) => rows
+          .map(
+            (row) => Ability(
+              id: row.read(abilities.id)!,
+              name: row.read(abilities.name)!,
+            ),
+          )
+          .toList(),
+    );
   }
 
   @override
@@ -155,6 +192,7 @@ class LocalPokemonRepository implements PokemonRepository {
                 isDefault: Value(item.isDefault),
               ),
             );
+        await _replaceAbilities(item);
         await (database.delete(
           database.pokemonTypeLinks,
         )..where((row) => row.pokemonId.equals(item.id))).go();
@@ -193,6 +231,37 @@ class LocalPokemonRepository implements PokemonRepository {
             ),
           );
     });
+  }
+
+  // Reemplaza los enlaces (restaura alteraciones, OF-19). De `ability` solo se
+  // actualiza el nombre: el efecto lo completa la sync del detalle.
+  Future<void> _replaceAbilities(Pokemon item) async {
+    await (database.delete(
+      database.pokemonAbilities,
+    )..where((row) => row.pokemonId.equals(item.id))).go();
+    for (final entry in item.abilities) {
+      await database
+          .into(database.abilities)
+          .insert(
+            AbilitiesCompanion.insert(
+              id: Value(entry.ability.id),
+              name: entry.ability.name,
+            ),
+            onConflict: DoUpdate(
+              (_) => AbilitiesCompanion(name: Value(entry.ability.name)),
+            ),
+          );
+      await database
+          .into(database.pokemonAbilities)
+          .insert(
+            PokemonAbilitiesCompanion.insert(
+              pokemonId: item.id,
+              abilityId: entry.ability.id,
+              slot: entry.slot,
+              isHidden: Value(entry.isHidden),
+            ),
+          );
+    }
   }
 
   // Solo escribe las columnas que trae el catalogo: lo que complete la sync del
