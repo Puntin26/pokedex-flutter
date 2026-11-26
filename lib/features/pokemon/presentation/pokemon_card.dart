@@ -3,9 +3,11 @@ import 'package:material_ui/material_ui.dart';
 import '../domain/pokemon.dart';
 
 class PokemonCard extends StatelessWidget {
-  const PokemonCard({super.key, required this.pokemon});
+  const PokemonCard({super.key, required this.pokemon, this.trailing});
 
   final Pokemon pokemon;
+  // Accion al final de la tarjeta (el corazon); la compone quien la usa.
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -35,6 +37,7 @@ class PokemonCard extends StatelessWidget {
                 ],
               ),
             ),
+            ?trailing,
           ],
         ),
       ),
