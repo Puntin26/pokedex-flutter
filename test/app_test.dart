@@ -15,6 +15,7 @@ import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_page_dto.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_sync_coordinator.dart';
 import 'package:pokedex/features/pokemon/data/remote_pokemon_source.dart';
+import 'package:pokedex/features/pokemon/domain/catalog_query.dart';
 import 'package:pokedex/features/pokemon/domain/pokemon.dart';
 import 'package:pokedex/features/pokemon/presentation/pokemon_catalog_controller.dart';
 import 'package:pokedex/features/pokemon/presentation/pokemon_catalog_state.dart';
@@ -44,10 +45,12 @@ class FailingRepository extends LocalPokemonRepository {
   bool failStatus = false;
 
   @override
-  Stream<List<Pokemon>> watchCatalog() {
+  Stream<List<Pokemon>> watchCatalog([
+    CatalogQuery query = const CatalogQuery(),
+  ]) {
     return failRead
         ? Stream.error(StateError('Fallo de lectura local'))
-        : super.watchCatalog();
+        : super.watchCatalog(query);
   }
 
   @override
@@ -60,6 +63,12 @@ class FailingRepository extends LocalPokemonRepository {
     await super.updateSyncStatus(resourceKey, status, lastError: lastError);
   }
 }
+
+// La lista del catalogo; el buscador tiene su propio Scrollable.
+final catalogList = find.descendant(
+  of: find.byType(ListView),
+  matching: find.byType(Scrollable),
+);
 
 // Deja avanzar SQLite en tiempo real sin esperar una descarga pendiente.
 Future<void> pumpUntil(WidgetTester tester, bool Function() ready) async {
@@ -219,7 +228,11 @@ void main() {
       expect(container!.read(localCatalogProvider).value, hasLength(30));
       expect(container!.read(catalogMetadataProvider).value!.nextOffset, 30);
       expect(find.text('Actualizando catalogo...'), findsOneWidget);
-      await tester.scrollUntilVisible(find.text('pokemon-30'), 400);
+      await tester.scrollUntilVisible(
+        find.text('pokemon-30'),
+        400,
+        scrollable: catalogList,
+      );
       expect(find.text('pokemon-30'), findsOneWidget);
 
       // Esta ruta comprueba el Navigator sin agregar otra pantalla al producto.
@@ -338,9 +351,16 @@ void main() {
       await pumpUntil(
         tester,
         () =>
-            find.text('pokemon-4').evaluate().isNotEmpty &&
+            container!.read(localCatalogProvider).value?.length == 4 &&
             !container!.read(pokemonCatalogStateProvider).isSyncing,
       );
+      // Con la barra de filtros el cuarto queda bajo el borde: se desplaza hasta el.
+      await tester.scrollUntilVisible(
+        find.text('pokemon-4'),
+        200,
+        scrollable: catalogList,
+      );
+      expect(find.text('pokemon-4'), findsOneWidget);
       expect(remote.offsets, [0, 2, 0, 2]);
       expect(tester.takeException(), isNull);
     },

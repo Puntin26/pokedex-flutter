@@ -34,19 +34,31 @@ class PokemonPageDto {
 }
 
 class PokemonDto {
-  PokemonDto._(
-    this.id,
-    this.nationalNumber,
-    this.name,
-    this.imageUrl,
-    this.types,
-  );
+  PokemonDto._({
+    required this.id,
+    required this.nationalNumber,
+    required this.name,
+    required this.imageUrl,
+    required this.types,
+    required this.species,
+    required this.height,
+    required this.weight,
+    required this.baseStatTotal,
+    required this.isDefault,
+    required this.abilities,
+  });
 
   final int id;
   final int nationalNumber;
   final String name;
   final String? imageUrl;
   final List<PokemonTypeSlot> types;
+  final PokemonSpecies species;
+  final int? height;
+  final int? weight;
+  final int? baseStatTotal;
+  final bool isDefault;
+  final List<PokemonAbility> abilities;
 
   factory PokemonDto.fromJson(Map<String, dynamic> row) {
     final id = _positiveInt(row['id']);
@@ -88,12 +100,27 @@ class PokemonDto {
       final front = _imageUrl(sprite['front']);
       imageUrl = artwork ?? front;
     }
+    final species = _species(row['pokemonspecy']);
+    // La especie anidada debe ser la misma que indica pokemon_species_id.
+    if (species.id != nationalNumber) _invalid();
+    final isDefault = row['is_default'];
+    if (isDefault is! bool) _invalid();
+    final statSum = _object(
+      _object(_object(row['pokemonstats_aggregate'])['aggregate'])['sum'],
+    );
     return PokemonDto._(
-      id,
-      nationalNumber,
-      name,
-      imageUrl,
-      List.unmodifiable(types),
+      id: id,
+      nationalNumber: nationalNumber,
+      name: name,
+      imageUrl: imageUrl,
+      types: List.unmodifiable(types),
+      species: species,
+      height: _optionalNonNegativeInt(row['height']),
+      weight: _optionalNonNegativeInt(row['weight']),
+      // Nulo si PokeAPI no tiene stats para esa forma.
+      baseStatTotal: _optionalNonNegativeInt(statSum['base_stat']),
+      isDefault: isDefault,
+      abilities: _abilities(row['pokemonabilities']),
     );
   }
 
@@ -104,7 +131,64 @@ class PokemonDto {
     imageUrl: imageUrl,
     updatedAt: updatedAt.toUtc(),
     types: types,
+    species: species,
+    height: height,
+    weight: weight,
+    baseStatTotal: baseStatTotal,
+    isDefault: isDefault,
+    abilities: abilities,
   );
+}
+
+// Puede venir vacia (hay Pokemon sin habilidades); slots 1-3 sin repetir.
+List<PokemonAbility> _abilities(Object? value) {
+  final abilities = _list(value).map((entry) {
+    final row = _object(entry);
+    final ability = _object(row['ability']);
+    final slot = _positiveInt(row['slot']);
+    final isHidden = row['is_hidden'];
+    if (slot > 3 || isHidden is! bool) _invalid();
+    return PokemonAbility(
+      ability: Ability(
+        id: _positiveInt(ability['id']),
+        name: _name(ability['name']),
+      ),
+      slot: slot,
+      isHidden: isHidden,
+    );
+  }).toList()..sort((a, b) => a.slot.compareTo(b.slot));
+  final slots = abilities.map((entry) => entry.slot).toSet();
+  final ids = abilities.map((entry) => entry.ability.id).toSet();
+  if (slots.length != abilities.length || ids.length != abilities.length) {
+    _invalid();
+  }
+  return List.unmodifiable(abilities);
+}
+
+PokemonSpecies _species(Object? value) {
+  final species = _object(value);
+  final generationValue = species['generation'];
+  Generation? generation;
+  if (generationValue != null) {
+    final row = _object(generationValue);
+    final region = row['region'];
+    generation = Generation(
+      id: _positiveInt(row['id']),
+      name: _name(row['name']),
+      regionName: region == null ? null : _name(_object(region)['name']),
+    );
+  }
+  return PokemonSpecies(
+    id: _positiveInt(species['id']),
+    name: _name(species['name']),
+    generation: generation,
+  );
+}
+
+int? _optionalNonNegativeInt(Object? value) {
+  if (value == null) return null;
+  if (value is! int || value < 0) _invalid();
+  return value;
 }
 
 Map<String, dynamic> _object(Object? value) {
