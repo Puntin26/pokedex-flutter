@@ -62,6 +62,8 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       ProviderScope(
+        // Clave nueva: cada mount crea un alcance limpio aunque se repita en un test.
+        key: UniqueKey(),
         overrides: [
           connectionStatusProvider.overrideWith(() => status),
           catalogMetadataProvider.overrideWith((ref) => Stream.value(metadata)),
@@ -223,5 +225,40 @@ void main() {
     await tester.longPress(find.byType(ConnectionIndicator));
     await tester.pump();
     expect(find.text('Simulacion: API caida'), findsNothing);
+  });
+
+  testWidgets('Los 4 estados de PA-12 tienen texto, icono y Semantics', (
+    tester,
+  ) async {
+    final metadata = catalogAt(DateTime(2026, 11, 26, 14, 5));
+    const cases = [
+      (ConnectionStatus.online, 'Online', Icons.cloud_done_outlined),
+      (ConnectionStatus.offline, 'Offline', Icons.wifi_off),
+      (
+        ConnectionStatus.serviceUnavailable,
+        'Servicio no disponible',
+        Icons.cloud_off_outlined,
+      ),
+    ];
+    for (final (connection, label, icon) in cases) {
+      await mount(tester, initial: connection, metadata: metadata);
+      expect(find.text(label), findsOneWidget, reason: label);
+      expect(find.byIcon(icon), findsOneWidget, reason: label);
+      expect(
+        find.bySemanticsLabel(RegExp('^${RegExp.escape(label)}\\. Datos ')),
+        findsOneWidget,
+        reason: label,
+      );
+    }
+
+    // El cuarto estado se suma a la conexion en vez de reemplazarla.
+    await mount(tester, metadata: metadata);
+    await emitActivity(tester, SyncActivity.syncing);
+    expect(find.text('Sincronizando'), findsOneWidget);
+    expect(find.byIcon(Icons.sync), findsOneWidget);
+    expect(
+      find.bySemanticsLabel(RegExp(r'^Online\. Sincronizando\. Datos ')),
+      findsOneWidget,
+    );
   });
 }
