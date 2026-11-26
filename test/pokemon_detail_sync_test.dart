@@ -11,31 +11,10 @@ import 'package:pokedex/features/favorites/data/local_favorites_repository.dart'
 import 'package:pokedex/features/pokemon/data/local_pokemon_detail_repository.dart';
 import 'package:pokedex/features/pokemon/data/local_pokemon_repository.dart';
 import 'package:pokedex/features/pokemon/data/pokemon_detail_sync_coordinator.dart';
-import 'package:pokedex/features/pokemon/data/remote_pokemon_detail_source.dart';
 import 'package:pokedex/features/pokemon/domain/move_query.dart';
 
 import 'support/detail_response.dart';
-
-class FakeDetailSource implements RemotePokemonDetailSource {
-  Future<Map<String, dynamic>> Function(int id) detail = (id) async =>
-      detailResponse(detailRow());
-  Future<Map<String, dynamic>> Function() efficacy = () async =>
-      typeEfficacyResponse();
-  final detailCalls = <int>[];
-  int efficacyCalls = 0;
-
-  @override
-  Future<Map<String, dynamic>> fetchDetail(int pokemonId) {
-    detailCalls.add(pokemonId);
-    return detail(pokemonId);
-  }
-
-  @override
-  Future<Map<String, dynamic>> fetchTypeEfficacy() {
-    efficacyCalls++;
-    return efficacy();
-  }
-}
+import 'support/fake_detail_source.dart';
 
 void main() {
   late AppDatabase database;
@@ -263,8 +242,13 @@ void main() {
         await sync.synchronize(133);
         await sync.synchronize(133);
         expect(remote.efficacyCalls, 1);
-        final rows = await repository.watchTypeEfficacy().first;
-        expect(rows, hasLength(6));
+        final chart = await repository.watchTypeEfficacy().first;
+        expect(chart.rows, hasLength(6));
+        expect(chart.types.map((type) => type.name), [
+          'fighting',
+          'ghost',
+          'normal',
+        ]);
         // Los tipos sin tabla (stellar, shadow) no quedan en el catalogo.
         final types = await LocalPokemonRepository(database).watchTypes().first;
         expect(types.map((type) => type.name), isNot(contains('stellar')));

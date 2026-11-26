@@ -107,7 +107,7 @@ void main() {
       expect(eevee.evolutions.length, greaterThanOrEqualTo(8));
       expect(eevee.abilities.where((entry) => entry.isHidden), isNotEmpty);
       expect(eevee.versionGroups, isNotEmpty);
-      expect(await repository.watchTypeEfficacy().first, hasLength(324));
+      expect((await repository.watchTypeEfficacy().first).rows, hasLength(324));
 
       // Bulbasaur tiene vine-whip dos veces en sun-moon (niveles 7 y 9).
       await sync.synchronize(1);

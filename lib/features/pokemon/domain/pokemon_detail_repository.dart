@@ -6,7 +6,9 @@ abstract interface class PokemonDetailRepository {
   /// null si el Pokemon no esta guardado todavia.
   Stream<PokemonDetail?> watchDetail(int pokemonId);
   Stream<List<PokemonMove>> watchMoves(MoveQuery query);
-  Stream<List<TypeEfficacy>> watchTypeEfficacy();
+
+  /// Tabla de efectividad con los tipos que participan (para los matchups).
+  Stream<TypeEfficacyDownload> watchTypeEfficacy();
 
   Future<void> saveDetail(PokemonDetailDownload detail, SyncMetadata metadata);
   Future<void> saveTypeEfficacy(

@@ -295,19 +295,37 @@ class LocalPokemonDetailRepository implements PokemonDetailRepository {
   }
 
   @override
-  Stream<List<TypeEfficacy>> watchTypeEfficacy() => database
-      .select(database.typeEfficacies)
-      .watch()
-      .map(
-        (rows) => [
-          for (final row in rows)
-            TypeEfficacy(
-              attackerTypeId: row.attackerTypeId,
-              defenderTypeId: row.defenderTypeId,
-              damageFactor: row.damageFactor,
-            ),
-        ],
-      );
+  Stream<TypeEfficacyDownload> watchTypeEfficacy() {
+    final efficacy = database.typeEfficacies;
+    final types = database.pokemonTypes;
+    // Tipos atacantes de la tabla: incluye los que ningun Pokemon guardado tiene.
+    final typeQuery = database.select(types)
+      ..where(
+        (type) => type.id.isInQuery(
+          database.selectOnly(efficacy)..addColumns([efficacy.attackerTypeId]),
+        ),
+      )
+      ..orderBy([(type) => OrderingTerm.asc(type.name)]);
+    return database
+        .select(efficacy)
+        .watch()
+        .asyncMap(
+          (rows) async => TypeEfficacyDownload(
+            types: [
+              for (final type in await typeQuery.get())
+                PokemonType(id: type.id, name: type.name),
+            ],
+            rows: [
+              for (final row in rows)
+                TypeEfficacy(
+                  attackerTypeId: row.attackerTypeId,
+                  defenderTypeId: row.defenderTypeId,
+                  damageFactor: row.damageFactor,
+                ),
+            ],
+          ),
+        );
+  }
 
   // Todo o nada (OF-04): si algo falla, no queda un detalle a medias.
   @override
